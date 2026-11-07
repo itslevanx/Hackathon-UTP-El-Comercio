@@ -1,0 +1,86 @@
+# macOS: metadatos de Finder, Spotlight y archivos de recursos
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100/
+.Trashes/
+.fseventsd/
+.VolumeIcon.icns
+.DocumentRevisions-V100/
+.TemporaryItems/
+.AppleDB
+.AppleDesktop
+Network Trash Folder/
+Temporary Items/
+
+# Configuración personal de editores y agentes
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.codex/
+.agents/
+
+# Secretos y configuración local (se permiten ejemplos sin credenciales)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Dependencias y artefactos web
+node_modules/
+/dist/
+/coverage/
+.cache/
+.vite/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Flutter / Dart: archivos generados para la futura aplicación
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+**/build/
+**/doc/api/
+**/android/.gradle/
+**/android/local.properties
+**/android/key.properties
+**/android/captures/
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/macos/Pods/
+**/macos/Flutter/ephemeral/
+
+# Xcode: datos personales y resultados de compilación
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcresult/
+*.ipa
+*.dSYM/
+*.dSYM.zip
+
+# Python: cachés y entornos del servidor local o herramientas
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Se deben versionar los archivos de bloqueo de dependencias de la app
+# (por ejemplo pubspec.lock y package-lock.json) cuando existan.
