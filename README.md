@@ -63,6 +63,36 @@ En Supabase, abre **Authentication → URL Configuration** y configura `pe.vecin
 
 El enlace abre la app instalada en el teléfono; no requiere desplegar una página web. Para recibirlo hay que instalar una compilación que incluya el esquema de retorno. Los correos anteriores pueden seguir apuntando a `localhost`: si el correo ya se confirmó, inicia sesión con la cuenta existente.
 
+## Ubicaciones del Perú sin conexión
+
+El selector **Departamento → Provincia → Distrito** usa el catálogo oficial de [INEI SISCONCODE](https://webapp.inei.gob.pe:8443/sisconcode/main.htm), edición **2026**, identificador `versionCategoriaPK=9-1`. Se descargó el **7 de noviembre de 2026**: 25 departamentos (incluido Callao), 196 provincias y 1.893 distritos. La fecha de descarga no implica que el INEI haya actualizado todos los registros ese día.
+
+El recurso `assets/geography/peru_ubigeo_2026.json` ocupa unos 89 KB y se incluye en la instalación de la app. Conserva los nombres oficiales y los códigos distritales de seis dígitos; la búsqueda acepta texto sin tildes. Su metadata contiene el origen, los parámetros de consulta y la huella SHA-256 de la descarga. `tools/update_ubigeo.py` permite reconstruirlo a partir del HTML exportado por el INEI.
+
+`PeruLocationSelector` admite valores iniciales o controlados, validación, campos opcionales, estado deshabilitado y selección hasta departamento o provincia. Los campos dependientes se limpian cuando cambia el padre. Las opciones se consultan en memoria y solo se muestran las del nivel elegido; no hay llamadas HTTP ni consultas a Supabase para cargar ubicaciones.
+
+Está integrado en el registro y en la edición de la zona del perfil. Las publicaciones, favores y reportes de emergencia heredan el UBIGEO del perfil para conservar sus recorridos rápidos. Las referencias de barrio o sector siguen siendo texto aparte, sin asignarles un código administrativo.
+
+SQLite conserva `district_ubigeo` en perfiles y publicaciones, y también en la cola pendiente. La versión 2 migra los registros anteriores conservando sus textos, coordenadas, borradores y operaciones. Los nombres antiguos o códigos incompletos no se convierten automáticamente: el formulario muestra el valor anterior hasta que el vecino elija una ubicación reconocida.
+
+La migración `20261107165219_peru_ubigeo_locations.sql` añade las columnas opcionales, sus índices y referencias al catálogo privado del servidor. Mantiene la búsqueda espacial anterior y añade una consulta por distrito para los registros sin coordenadas. El catálogo privado valida las escrituras; la app usa su copia local.
+
+Cuando no se usa GPS, una zona nueva puede tomar las coordenadas de capital publicadas por el INEI. Hay 35 distritos sin una coordenada de capital utilizable en esta fuente: su selección sigue funcionando, pero se muestran por distrito, sin inventar una distancia ni un marcador. Una ubicación guardada no se reemplaza por la capital al editar su referencia.
+
+| Archivos | Responsabilidad |
+|---|---|
+| `assets/geography/peru_ubigeo_2026.json`, `tools/update_ubigeo.py` | Catálogo, procedencia y reconstrucción |
+| `lib/core/geography/peru_location_catalog.dart` | Índices, jerarquías y búsqueda local |
+| `lib/features/shared/peru_location_selector.dart` | Componente reutilizable y selector con búsqueda |
+| `lib/features/auth/auth_and_onboarding_screen.dart` | Registro y edición de zona |
+| `lib/core/models/domain_models.dart`, `lib/core/state/app_controller.dart` | UBIGEO, restauración y publicaciones heredadas |
+| `lib/core/database/local_sqlite_database.dart`, `lib/core/sync/supabase_remote_gateway.dart` | Migración SQLite y sincronización |
+| `lib/features/shared/civic_widgets.dart`, pantallas de servicios, actividades, favores y publicación | Nombres completos y manejo de resultados sin coordenadas |
+| `supabase/migrations/20261107165219_peru_ubigeo_locations.sql` | Compatibilidad y validación en PostgreSQL |
+| `test/peru_locations_test.dart`, `test/fixtures/sqlite_v1.sql`, `supabase/tests/ubigeo_verification.sql` | Pruebas del selector, persistencia, migración y permisos |
+
+El selector y las preferencias funcionan sin internet; crear una cuenta real de Supabase o confirmar un envío a otros vecinos sigue requiriendo conexión. El prototipo HTML permanece como material de referencia, separado de los formularios móviles.
+
 ## Base de datos
 
 Las migraciones están en `supabase/migrations/` y deben aplicarse en orden sobre un proyecto Supabase. Crean las tablas, los permisos, los procedimientos de búsqueda y el canal de mensajes. PostGIS se instala en el esquema `extensions`, fuera de la API pública.
@@ -73,6 +103,7 @@ Las comprobaciones están en:
 
 - `supabase/tests/rls_and_postgis_verification.sql`: permisos, cercanía, recomendaciones, privacidad del chat y reintentos. Los datos de prueba se revierten al terminar.
 - `supabase/tests/deployment_health.sql`: estado de tablas, RLS, PostGIS y Realtime.
+- `supabase/tests/ubigeo_verification.sql`: catálogo, códigos válidos, perfiles y publicaciones sin GPS, compatibilidad y permisos. Revierte sus datos de prueba.
 
 `supabase/seed.sql` contiene datos de demostración opcionales; no debe cargarse como contenido real del barrio.
 
@@ -95,9 +126,9 @@ node --check protipo/prototype.js
 node --check protipo/practice.js
 ```
 
-La revisión actual cuenta con 21 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y cero advertencias. El aviso informativo de la tabla privada de recibos corresponde a su acceso cerrado a clientes.
+La revisión actual cuenta con 30 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y una advertencia de autenticación: la protección contra contraseñas filtradas está desactivada en el proyecto. Los avisos informativos de las tablas privadas sin políticas corresponden a su acceso cerrado a clientes.
 
-La app se compiló y abrió en un simulador iPhone con iOS 27.1, donde se completaron las cinco misiones del simulacro de sismo. Todavía falta comprobar las conversaciones y la sincronización entre sesiones reales, GPS, VoiceOver y TalkBack. No hay APK validado: falta instalar el Android SDK en el entorno de revisión.
+La app se compiló y abrió en un simulador iPhone con iOS 27.1, donde se completaron las cinco misiones del simulacro de sismo. También se verificó la selección Amazonas → Chachapoyas → Chachapoyas y el guardado local de la zona sin crear una cuenta. Todavía falta comprobar las conversaciones y la sincronización entre sesiones reales, GPS, VoiceOver y TalkBack. No hay APK validado: falta instalar el Android SDK en el entorno de revisión.
 
 ## Estructura
 
