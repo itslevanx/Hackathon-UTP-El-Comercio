@@ -50,13 +50,13 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
       widget.controller.activeDistrictUbigeo,
     );
     _sectorController.text = widget.controller.activeSector;
-    _gpsLat = widget.controller.currentUser?.useGpsApprox == true
+    _gpsLat = widget.controller.activeUsesGps
         ? widget.controller.activeLat
         : null;
-    _gpsLng = widget.controller.currentUser?.useGpsApprox == true
+    _gpsLng = widget.controller.activeUsesGps
         ? widget.controller.activeLng
         : null;
-    _useOptionalGps = widget.controller.currentUser?.useGpsApprox ?? false;
+    _useOptionalGps = widget.controller.activeUsesGps;
   }
 
   @override

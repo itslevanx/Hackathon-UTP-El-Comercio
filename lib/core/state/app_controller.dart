@@ -65,6 +65,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   late final PeruLocationCatalog locationCatalog;
   String? _selectedManualUbigeo;
+  bool _selectedManualUsesGps = false;
+  bool get activeUsesGps =>
+      _currentUser?.useGpsApprox ?? _selectedManualUsesGps;
   String? get activeDistrictUbigeo => _currentUser != null
       ? _currentUser!.districtUbigeo
       : _selectedManualUbigeo;
@@ -179,6 +182,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     final manual = await database.readManualLocation();
     if (manual != null) {
       _selectedManualUbigeo = manual['district_ubigeo'] as String?;
+      _selectedManualUsesGps = manual['use_gps_approx'] == 1;
       _selectedManualNeighborhood = manual['neighborhood'] as String;
       _selectedManualSector = manual['sector'] as String;
       _selectedManualLat = (manual['approx_lat'] as num?)?.toDouble();
@@ -993,6 +997,16 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         'Selecciona un distrito reconocido en el catálogo INEI.',
       );
     }
+    if (_currentUser == null) {
+      await updateLocationPreference(
+        neighborhood: neighborhood,
+        sector: sector,
+        districtUbigeo: districtUbigeo,
+        approxLat: approxLat,
+        approxLng: approxLng,
+        useGpsApprox: useGpsApprox,
+      );
+    }
     _authActionInProgress = true;
     _authEpoch++;
     try {
@@ -1071,6 +1085,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
     _selectedManualUbigeo = districtUbigeo;
+    _selectedManualUsesGps = useGpsApprox;
     _selectedManualNeighborhood = neighborhood;
     _selectedManualSector = sector;
     _selectedManualLat = AppConfig.roundOptionalPublicCoordinate(approxLat);

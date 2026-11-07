@@ -177,7 +177,9 @@ class _PeruLocationSelectorState extends FormFieldState<PeruLocationSelection> {
             'Provincia',
             selected.provinceCode,
             selected.departmentCode != null,
-            'Primero elige un departamento',
+            selected.departmentCode == null
+                ? 'Primero elige un departamento'
+                : 'Elige una provincia',
           ),
         if (widget.maxLevel == PeruLocationLevel.district)
           field(
@@ -185,7 +187,9 @@ class _PeruLocationSelectorState extends FormFieldState<PeruLocationSelection> {
             'Distrito',
             selected.districtCode,
             selected.provinceCode != null,
-            'Primero elige una provincia',
+            selected.provinceCode == null
+                ? 'Primero elige una provincia'
+                : 'Elige un distrito',
           ),
         if (hasError)
           Padding(

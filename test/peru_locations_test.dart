@@ -232,6 +232,89 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Selector opcional por departamento con texto al 200%', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 760);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final form = GlobalKey<FormState>();
+    final selector = GlobalKey<FormFieldState<PeruLocationSelection>>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Form(
+            key: form,
+            child: SingleChildScrollView(
+              child: PeruLocationSelector(
+                key: selector,
+                catalog: catalog,
+                maxLevel: PeruLocationLevel.department,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(form.currentState!.validate(), isTrue);
+    expect(find.byKey(const ValueKey('peru_location_province')), findsNothing);
+    await choose(tester, 'department', 'lambayeque', '14');
+    expect(selector.currentState!.value?.departmentCode, '14');
+    expect(selector.currentState!.value?.provinceCode, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  test(
+    'Fallar el registro remoto conserva la ubicación elegida para reintentar',
+    () async {
+      final db = LocalSqliteDatabase(
+        engine: InMemoryTransactionalStoreEngine(),
+      );
+      final remote = SupabaseRemoteGateway();
+      final controller = AppController(
+        database: db,
+        remoteGateway: remote,
+        outboxSyncService: OutboxSyncService(
+          database: db,
+          remoteGateway: remote,
+        ),
+      );
+      await controller.initialize(startWithActiveSession: false);
+      await expectLater(
+        controller.registerAndSignIn(
+          alias: 'Prueba',
+          email: 'offline@example.test',
+          password: 'clave-de-prueba',
+          neighborhood: 'Chachapoyas',
+          sector: 'Referencia',
+          districtUbigeo: '010101',
+          approxLat: null,
+          approxLng: null,
+          useGpsApprox: false,
+        ),
+        throwsStateError,
+      );
+      expect(controller.currentUser, isNull);
+      expect((await db.readManualLocation())?['district_ubigeo'], '010101');
+      controller.dispose();
+      final restored = AppController(
+        database: db,
+        remoteGateway: remote,
+        outboxSyncService: OutboxSyncService(
+          database: db,
+          remoteGateway: remote,
+        ),
+      );
+      await restored.initialize(startWithActiveSession: false);
+      expect(restored.activeDistrictUbigeo, '010101');
+      expect(restored.activeLat, isNull);
+      restored.dispose();
+    },
+  );
+
   testWidgets('Registro, perfil y publicaciones guardan UBIGEO sin conexión', (
     tester,
   ) async {
