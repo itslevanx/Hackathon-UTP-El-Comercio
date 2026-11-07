@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hackathon_utp_el_comercio/core/geography/peru_location_catalog.dart';
 import 'package:hackathon_utp_el_comercio/core/accessibility/accessibility_controller.dart';
 import 'package:hackathon_utp_el_comercio/core/database/local_sqlite_database.dart';
 import 'package:hackathon_utp_el_comercio/core/state/app_controller.dart';
@@ -46,6 +47,8 @@ EditableTextState editableState(WidgetTester tester, String key) =>
     );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(PeruLocationCatalog.load);
   testWidgets('Copiar y pegar entre campos no abre menús nativos simultáneos', (
     tester,
   ) async {

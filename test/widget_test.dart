@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hackathon_utp_el_comercio/core/geography/peru_location_catalog.dart';
 
 import 'package:hackathon_utp_el_comercio/core/accessibility/accessibility_controller.dart';
 import 'package:hackathon_utp_el_comercio/core/config/app_config.dart';
@@ -29,6 +30,8 @@ Future<AppController> _createInitializedTestController({
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(PeruLocationCatalog.load);
   group('1. Presupuesto estricto de <= 3 clics desde Inicio', () {
     testWidgets(
       'Tarea 1 (Pedir ayuda): Inicio -> Necesito ayuda (Clic 1) -> escribir -> Enviar solicitud (Clic 2)',

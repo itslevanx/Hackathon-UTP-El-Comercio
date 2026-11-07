@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hackathon_utp_el_comercio/core/geography/peru_location_catalog.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:hackathon_utp_el_comercio/core/accessibility/accessibility_controller.dart';
 import 'package:hackathon_utp_el_comercio/core/config/app_config.dart';
@@ -16,6 +17,7 @@ import 'package:hackathon_utp_el_comercio/main.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(PeruLocationCatalog.load);
   test('El retorno de autenticación rechaza enlaces ajenos', () {
     expect(
       AppConfig.isAuthCallbackUri(
