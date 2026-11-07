@@ -1,121 +1,232 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'core/accessibility/accessibility_controller.dart';
+import 'core/config/app_config.dart';
+import 'core/database/local_sqlite_database.dart';
+import 'core/state/app_controller.dart';
+import 'core/sync/outbox_sync_service.dart';
+import 'core/sync/supabase_remote_gateway.dart';
+import 'core/theme/app_theme.dart';
+import 'features/activities/my_activities_and_profile_screen.dart';
+import 'features/auth/auth_and_onboarding_screen.dart';
+import 'features/chat/chat_screens.dart';
+import 'features/emergencies/emergency_hub_screen.dart';
+import 'features/favors/favor_detail_screen.dart';
+import 'features/favors/favors_screen.dart';
+import 'features/home/home_screen.dart';
+import 'features/practice/practice_simulator.dart';
+import 'features/publish/publish_screen.dart';
+import 'features/services/service_detail_screen.dart';
+import 'features/services/services_directory_screen.dart';
+import 'features/shared/civic_widgets.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  if (AppConfig.hasSupabaseCredentials) {
+    try {
+      await Supabase.initialize(
+        url: AppConfig.supabaseUrl,
+        publishableKey: AppConfig.supabaseAnonKey,
+      );
+    } catch (_) {
+      // Si el dispositivo arranca en modo avión desde primera instalación,
+      // continúa con SQLite local y cola Outbox sin bloquear el arranque.
+    }
+  }
+
+  final database = LocalSqliteDatabase();
+  final remoteGateway = SupabaseRemoteGateway();
+  final outboxSyncService = OutboxSyncService(
+    database: database,
+    remoteGateway: remoteGateway,
+  );
+  final appController = AppController(
+    database: database,
+    remoteGateway: remoteGateway,
+    outboxSyncService: outboxSyncService,
+  );
+  final accessibilityController = AccessibilityController();
+
+  await appController.initialize(startWithActiveSession: true);
+
+  runApp(
+    NexoNeighborhoodApp(
+      appController: appController,
+      accessibilityController: accessibilityController,
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// Aplicación principal comunitaria (nombre provisional centralizado en
+/// [AppConfig.provisionalAppName]).
+class NexoNeighborhoodApp extends StatelessWidget {
+  const NexoNeighborhoodApp({
+    super.key,
+    required this.appController,
+    required this.accessibilityController,
+  });
 
-  // This widget is the root of your application.
+  final AppController appController;
+  final AccessibilityController accessibilityController;
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return ListenableBuilder(
+      listenable: Listenable.merge([appController, accessibilityController]),
+      builder: (context, _) {
+        final mediaReduceMotion =
+            MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+        final reduceMotion = accessibilityController.effectiveReduceMotion(
+          mediaReduceMotion,
+        );
+
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title:
+              '${AppConfig.provisionalAppName} — ${AppConfig.provisionalSubtitle}',
+          theme: AppTheme.buildTheme(reduceMotion: reduceMotion),
+          builder: (context, child) {
+            final currentMedia = MediaQuery.of(context);
+            final systemFactor = currentMedia.textScaler.scale(1.0);
+            final combinedFactor =
+                systemFactor * accessibilityController.userTextScaleMultiplier;
+
+            return MediaQuery(
+              data: currentMedia.copyWith(
+                textScaler: TextScaler.linear(combinedFactor),
+                disableAnimations: reduceMotion,
+              ),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
+          home: _MainCivicShell(
+            controller: appController,
+            accessibilityController: accessibilityController,
+          ),
+        );
+      },
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class _MainCivicShell extends StatelessWidget {
+  const _MainCivicShell({
+    required this.controller,
+    required this.accessibilityController,
+  });
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+  final AppController controller;
+  final AccessibilityController accessibilityController;
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final section = controller.currentSection;
+    final showBack = section != AppSection.inicio;
+    if (section == AppSection.practicaSimulacro) {
+      return Scaffold(
+        body: SafeArea(
+          child: PracticeSimulatorScreen(
+            database: controller.database,
+            onExitPractice: controller.goHome,
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+      appBar: CivicAppBar(
+        title: AppConfig.provisionalAppName,
+        height:
+            (MediaQuery.textScalerOf(context).scale(1) > 1.3 ? 164 : 100) +
+            (showBack ? 56 : 0),
+        neighborhoodLabel:
+            '${controller.activeNeighborhood} · ${controller.activeSector}',
+        accessibilityController: accessibilityController,
+        showBackButton: showBack,
+        onBackTap: controller.goBack,
+        isOffline: controller.isOfflineMode,
+        onProfileTap: () => controller.navigateTo(AppSection.misActividades),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+      body: SafeArea(child: _buildActiveSectionBody()),
+      bottomNavigationBar: _buildAccessibleBottomNav(),
+    );
+  }
+
+  Widget _buildActiveSectionBody() {
+    switch (controller.currentSection) {
+      case AppSection.inicio:
+        return HomeScreen(controller: controller);
+      case AppSection.publicarRapido:
+        return PublishScreen(controller: controller);
+      case AppSection.servicios:
+        return ServicesDirectoryScreen(controller: controller);
+      case AppSection.detalleServicio:
+        return ServiceDetailScreen(controller: controller);
+      case AppSection.favores:
+        return FavorsScreen(controller: controller);
+      case AppSection.detalleFavor:
+        return FavorDetailScreen(controller: controller);
+      case AppSection.emergencias:
+        return EmergencyHubScreen(controller: controller);
+      case AppSection.chatLista:
+        return ChatListScreen(controller: controller);
+      case AppSection.chatConversacion:
+        return ChatConversationScreen(controller: controller);
+      case AppSection.misActividades:
+        return MyActivitiesAndProfileScreen(controller: controller);
+      case AppSection.autenticacion:
+        return AuthAndOnboardingScreen(controller: controller);
+      case AppSection.practicaSimulacro:
+        return PracticeSimulatorScreen(
+          database: controller.database,
+          onExitPractice: controller.goHome,
+        );
+    }
+  }
+
+  Widget _buildAccessibleBottomNav() {
+    final destinations = <(String, IconData, VoidCallback)>[
+      ('Inicio', Icons.home_outlined, controller.goHome),
+      (
+        'Servicios',
+        Icons.search,
+        () => controller.navigateTo(AppSection.servicios),
+      ),
+      (
+        'Actividad',
+        Icons.person_outline,
+        () => controller.navigateTo(AppSection.misActividades),
+      ),
+    ];
+    return SafeArea(
+      top: false,
+      child: Material(
+        color: AppTheme.surfaceCard,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
+            for (final destination in destinations)
+              Expanded(
+                child: TextButton(
+                  onPressed: destination.$3,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(destination.$2),
+                      const SizedBox(height: 4),
+                      Text(
+                        destination.$1,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
