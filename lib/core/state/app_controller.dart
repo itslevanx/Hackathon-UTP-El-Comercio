@@ -1,0 +1,986 @@
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
+
+import '../config/app_config.dart';
+import '../models/entity_id.dart';
+import '../database/local_sqlite_database.dart';
+import '../models/domain_models.dart';
+import '../sync/outbox_sync_service.dart';
+import '../sync/supabase_remote_gateway.dart';
+
+/// Intención conservada cuando un vecino sin sesión activa intenta realizar una
+/// acción que requiere autenticación, para retomarla inmediatamente al ingresar.
+class PendingAuthIntent {
+  const PendingAuthIntent({
+    required this.description,
+    required this.targetRoute,
+    this.publicationId,
+    this.presetKind,
+    this.lockType = false,
+  });
+
+  final String description;
+  final String targetRoute;
+  final String? publicationId;
+  final PublicationKind? presetKind;
+  final bool lockType;
+}
+
+/// Rutas principales de primer nivel accesibles desde Inicio en 1 clic.
+enum AppSection {
+  inicio,
+  publicarRapido,
+  servicios,
+  detalleServicio,
+  favores,
+  detalleFavor,
+  emergencias,
+  chatLista,
+  chatConversacion,
+  misActividades,
+  autenticacion,
+  practicaSimulacro,
+}
+
+/// Controlador central de estado de la aplicación comunitaria NEXO.
+class AppController extends ChangeNotifier with WidgetsBindingObserver {
+  Timer? _syncTimer;
+  bool _refreshingRemote = false;
+  bool _disposed = false;
+  AppController({
+    required this.database,
+    required this.remoteGateway,
+    required this.outboxSyncService,
+  });
+
+  final LocalSqliteDatabase database;
+  final SupabaseRemoteGateway remoteGateway;
+  final OutboxSyncService outboxSyncService;
+
+  bool _initialized = false;
+  bool get initialized => _initialized;
+
+  UserProfile? _currentUser;
+  UserProfile? get currentUser => _currentUser;
+  bool get isAuthenticated => _currentUser != null;
+
+  String get activeNeighborhood =>
+      _currentUser?.neighborhood ?? _selectedManualNeighborhood;
+  String get activeSector => _currentUser?.sector ?? _selectedManualSector;
+  double get activeLat => _currentUser?.approxLat ?? _selectedManualLat;
+  double get activeLng => _currentUser?.approxLng ?? _selectedManualLng;
+
+  String _selectedManualNeighborhood = AppConfig.defaultNeighborhood;
+  String _selectedManualSector = AppConfig.defaultSector;
+  double _selectedManualLat = AppConfig.defaultLat;
+  double _selectedManualLng = AppConfig.defaultLng;
+
+  AppSection _currentSection = AppSection.inicio;
+  AppSection get currentSection => _currentSection;
+
+  final List<AppSection> _navigationStack = <AppSection>[AppSection.inicio];
+
+  /// Estado del flujo de publicación rápida (2 clics para emergencia / pedir ayuda,
+  /// 3 clics para publicar servicio o favor general).
+  PublicationKind _publishPresetKind = PublicationKind.favorSolicitud;
+  PublicationKind get publishPresetKind => _publishPresetKind;
+
+  bool _publishTypeLocked = false;
+  bool get publishTypeLocked => _publishTypeLocked;
+
+  Publication? _lastSubmittedPublication;
+  Publication? get lastSubmittedPublication => _lastSubmittedPublication;
+
+  /// Filtros del directorio de servicios
+  String _serviceSearchQuery = '';
+  String get serviceSearchQuery => _serviceSearchQuery;
+
+  String _serviceCategoryFilter = 'todos';
+  String get serviceCategoryFilter => _serviceCategoryFilter;
+
+  double? _serviceRadiusMeters;
+  double? get serviceRadiusMeters => _serviceRadiusMeters;
+
+  bool _serviceMapQuadrantView = false;
+  bool get serviceMapQuadrantView => _serviceMapQuadrantView;
+
+  /// Filtros de favores solidarios
+  String _favorCategoryFilter = 'todos';
+  String get favorCategoryFilter => _favorCategoryFilter;
+
+  PublicationStatus? _favorStatusFilter;
+  PublicationStatus? get favorStatusFilter => _favorStatusFilter;
+
+  /// Selección de detalle y conversación
+  Publication? _selectedPublication;
+  Publication? get selectedPublication => _selectedPublication;
+
+  ConversationThread? _selectedConversation;
+  ConversationThread? get selectedConversation => _selectedConversation;
+
+  PendingAuthIntent? _pendingAuthIntent;
+  PendingAuthIntent? get pendingAuthIntent => _pendingAuthIntent;
+
+  bool _showOnboardingTutorial = false;
+  bool get showOnboardingTutorial => _showOnboardingTutorial;
+
+  String? _statusBannerMessage;
+  String? get statusBannerMessage => _statusBannerMessage;
+
+  List<Publication> _publications = const [];
+  List<Publication> get publications => _publications;
+
+  List<CommunityResource> _communityResources = const [];
+  List<CommunityResource> get communityResources => _communityResources;
+
+  List<SupportGroup> _supportGroups = const [];
+  List<SupportGroup> get supportGroups => _supportGroups;
+
+  List<OutboxOperation> _userOutbox = const [];
+  List<OutboxOperation> get userOutbox => _userOutbox;
+
+  List<FormDraft> _userDrafts = const [];
+  List<FormDraft> get userDrafts => _userDrafts;
+
+  List<ConversationThread> _userConversations = const [];
+  List<ConversationThread> get userConversations => _userConversations;
+
+  DateTime? _lastSyncTimestamp;
+  DateTime? get lastSyncTimestamp => _lastSyncTimestamp;
+
+  bool get isOfflineMode =>
+      remoteGateway.simulateNetworkOffline ||
+      (!remoteGateway.isLiveSupabaseConnected && !remoteGateway.isTestDouble);
+
+  /// Inicializa SQLite, semilla comunitaria de Pueblo Libre y sesión activa.
+  Future<void> initialize({bool startWithActiveSession = true}) async {
+    await database.initAndSeedDemoData(seedDemo: remoteGateway.isTestDouble);
+
+    if (startWithActiveSession) {
+      final sessionProfile = await remoteGateway.getCurrentSessionProfile();
+      if (sessionProfile != null) {
+        _currentUser = sessionProfile;
+      } else if (remoteGateway.isTestDouble) {
+        // Sesión vecinal por defecto para permitir verificación inmediata del
+        // presupuesto de <= 3 clics desde Inicio (puede cerrarse o cambiarse).
+        final defaultProfile = await remoteGateway.signInAccount(
+          email: 'maria@pueblolibre.pe',
+          password: 'vecinos-pueblo-libre',
+        );
+        _currentUser = defaultProfile;
+      }
+      if (_currentUser != null) {
+        await database.saveUserProfile(_currentUser!, queueSync: false);
+      }
+    }
+
+    await refreshAllLocalData();
+    _initialized = true;
+    if (remoteGateway.isLiveSupabaseConnected && !remoteGateway.isTestDouble) {
+      WidgetsBinding.instance.addObserver(this);
+      _syncTimer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => refreshFromServer(),
+      );
+      unawaited(refreshFromServer());
+    }
+    notifyListeners();
+  }
+
+  Future<void> refreshFromServer() async {
+    if (_refreshingRemote ||
+        _disposed ||
+        _currentUser == null ||
+        !remoteGateway.isLiveSupabaseConnected ||
+        remoteGateway.simulateNetworkOffline) {
+      return;
+    }
+    _refreshingRemote = true;
+    final uid = _currentUser!.id;
+    try {
+      await outboxSyncService.syncPendingForUser(uid);
+      final publications = await remoteGateway.fetchPublicationsWithinRadius(
+        originLat: activeLat,
+        originLng: activeLng,
+        radiusMeters: 20000,
+      );
+      final snapshot = await remoteGateway.fetchCommunitySnapshot();
+      if (_disposed || _currentUser?.id != uid) return;
+      await database.mergeRemotePublications(publications);
+      await database.mergeCommunitySnapshot(snapshot);
+      await refreshAllLocalData();
+    } catch (_) {
+      if (!_disposed && _currentUser?.id == uid) {
+        _statusBannerMessage = 'No se pudo actualizar el barrio. Consulta la copia guardada; los envíos pendientes aún NO están comunicados.';
+        notifyListeners();
+      }
+    } finally {
+      _refreshingRemote = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(refreshFromServer());
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _syncTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Recarga todas las listas desde SQLite respetando el aislamiento por usuario.
+  Future<void> refreshAllLocalData() async {
+    final activeId = _currentUser?.id ?? 'anonymous';
+    _publications = await database.listPublications(activeUserId: activeId);
+    _communityResources = await database.listCommunityResources(
+      neighborhood: activeNeighborhood,
+    );
+    _supportGroups = await database.listSupportGroups(
+      neighborhood: activeNeighborhood,
+    );
+    _lastSyncTimestamp = await database.getLastSyncTimestamp();
+
+    if (_currentUser != null) {
+      _userOutbox = await database.listOutboxForUser(_currentUser!.id);
+      _userDrafts = await database.listDraftsForUser(_currentUser!.id);
+      _userConversations = await database.listConversationsForUser(
+        _currentUser!.id,
+      );
+    } else {
+      _userOutbox = const [];
+      _userDrafts = const [];
+      _userConversations = const [];
+    }
+
+    if (_selectedPublication != null) {
+      final updated = _publications
+          .where((p) => p.id == _selectedPublication!.id)
+          .toList();
+      if (updated.isNotEmpty) {
+        _selectedPublication = updated.first;
+      }
+    }
+
+    notifyListeners();
+  }
+
+  /// Activa o desactiva el modo sin conexión para pruebas o uso real sin red.
+  Future<void> setOfflineMode(bool offline) async {
+    remoteGateway.simulateNetworkOffline = offline;
+    if (!offline && _currentUser != null) {
+      final summary = await outboxSyncService.syncPendingForUser(
+        _currentUser!.id,
+      );
+      if (summary.confirmedCount > 0) {
+        _statusBannerMessage =
+            'Conexión restablecida: ${summary.confirmedCount} envío(s) confirmado(s) con el barrio.';
+      }
+    } else if (offline) {
+      _statusBannerMessage = 'Modo sin conexión activo: puedes consultar datos guardados y crear solicitudes en cola local.';
+    }
+    await refreshAllLocalData();
+  }
+
+  void clearStatusBanner() {
+    _statusBannerMessage = null;
+    notifyListeners();
+  }
+
+  void toggleOnboardingTutorial(bool visible) {
+    _showOnboardingTutorial = visible;
+    notifyListeners();
+  }
+
+  /// Navegación directa sin pasos redundantes.
+  void navigateTo(AppSection section) {
+    _lastSubmittedPublication = null;
+    if (_currentSection != section) {
+      _navigationStack.add(section);
+      _currentSection = section;
+    }
+    notifyListeners();
+  }
+
+  void goHome() {
+    _lastSubmittedPublication = null;
+    _navigationStack
+      ..clear()
+      ..add(AppSection.inicio);
+    _currentSection = AppSection.inicio;
+    notifyListeners();
+  }
+
+  void goBack() {
+    _lastSubmittedPublication = null;
+    if (_navigationStack.length > 1) {
+      _navigationStack.removeLast();
+      _currentSection = _navigationStack.last;
+    } else {
+      _currentSection = AppSection.inicio;
+    }
+    notifyListeners();
+  }
+
+  /// Clic 1 desde Inicio:
+  /// - `Reportar emergencia` -> tipo `emergenciaSolicitud` y prioridad `emergencia` predefinidos (2 clics total).
+  /// - `Necesito ayuda` -> tipo `favorSolicitud` y prioridad `normal` predefinidos (2 clics total).
+  /// - `Publicar servicio o favor` -> permite elegir tipo en clic 2 y enviar en clic 3 (3 clics total).
+  void openQuickPublish({
+    required PublicationKind presetKind,
+    required bool lockTypeForTwoClickFlow,
+  }) {
+    _lastSubmittedPublication = null;
+    _publishPresetKind = presetKind;
+    _publishTypeLocked = lockTypeForTwoClickFlow;
+
+    if (!isAuthenticated) {
+      _pendingAuthIntent = PendingAuthIntent(
+        description: presetKind.isEmergency
+            ? 'Reportar emergencia vecinal'
+            : 'Publicar en mi barrio',
+        targetRoute: 'publicar',
+        presetKind: presetKind,
+        lockType: lockTypeForTwoClickFlow,
+      );
+      navigateTo(AppSection.autenticacion);
+      return;
+    }
+
+    navigateTo(AppSection.publicarRapido);
+  }
+
+  void setPublishPresetKind(PublicationKind kind) {
+    _publishPresetKind = kind;
+    notifyListeners();
+  }
+
+  /// Clic 2 (en flujos de emergencia/ayuda) o Clic 3 (en flujo de servicio/favor):
+  /// Guarda en SQLite y cola Outbox dentro de la misma transacción e intenta
+  /// sincronizar si hay conexión.
+  Future<Publication> submitPublication({
+    required PublicationKind kind,
+    required String category,
+    required String title,
+    required String description,
+    String availabilityText = '',
+    bool shareResourceConsent = false,
+    String? customClientMutationId,
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      throw StateError('Inicia sesión para publicar en tu barrio.');
+    }
+    if (title.trim().isEmpty) {
+      throw StateError('Escribe un título breve y claro.');
+    }
+    if (description.trim().isEmpty) {
+      throw StateError('Describe brevemente qué necesitas o qué ofreces.');
+    }
+
+    final now = DateTime.now().toUtc();
+    final mutationId = customClientMutationId ?? EntityId.create();
+    final pubId = EntityId.create();
+
+    final priority = kind.isEmergency
+        ? PublicationPriority.emergencia
+        : PublicationPriority.normal;
+
+    final draftPub = Publication(
+      id: pubId,
+      clientMutationId: mutationId,
+      ownerUserId: user.id,
+      authorId: user.id,
+      authorAlias: user.alias,
+      kind: kind,
+      category: category,
+      title: title.trim(),
+      description: description.trim(),
+      neighborhood: user.neighborhood,
+      sector: user.sector,
+      availabilityText: availabilityText.trim().isEmpty
+          ? 'Horario flexible previa coordinación'
+          : availabilityText.trim(),
+      priority: priority,
+      status: PublicationStatus.abierta,
+      approxLat: user.approxLat,
+      approxLng: user.approxLng,
+      shareResourceConsent: shareResourceConsent,
+      syncStatus: SyncStatus.pendiente,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    final savedLocal = await database.createOrUpdatePublicationTransactional(
+      draftPub,
+    );
+
+    // Intento inmediato de sincronización si hay red disponible
+    await outboxSyncService.syncPendingForUser(
+      user.id,
+      onlyOperationId: savedLocal.clientMutationId,
+    );
+
+    await refreshAllLocalData();
+    final refreshed = _publications
+        .where((p) => p.id == savedLocal.id)
+        .toList();
+    final effectivePub = refreshed.isNotEmpty ? refreshed.first : savedLocal;
+    _lastSubmittedPublication = effectivePub;
+    notifyListeners();
+    return effectivePub;
+  }
+
+  /// Abre el detalle de un servicio (Clic 2 desde Buscar servicios).
+  void openServiceDetail(Publication service) {
+    _selectedPublication = service;
+    navigateTo(AppSection.detalleServicio);
+  }
+
+  /// Abre el detalle de un favor o emergencia (Clic 2 desde Ver favores y ayudar).
+  void openFavorDetail(Publication favor) {
+    _selectedPublication = favor;
+    navigateTo(AppSection.detalleFavor);
+  }
+
+  /// Clic 3 en `Buscar servicios` -> abrir ficha -> `He usado este servicio y lo recomiendo`.
+  Future<ServiceRecommendation> recommendService({
+    required Publication service,
+    String comment = 'Buen trato vecinal y cumplimiento puntual.',
+    bool allowUpdateExisting = false,
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      _pendingAuthIntent = PendingAuthIntent(
+        description: 'Recomendar servicio de ${service.authorAlias}',
+        targetRoute: 'detalle_servicio',
+        publicationId: service.id,
+      );
+      navigateTo(AppSection.autenticacion);
+      throw StateError('Inicia sesión para registrar tu recomendación.');
+    }
+
+    final rec = await database.submitOrUpdateRecommendation(
+      id: EntityId.forContext('recommendation:${service.id}:${user.id}'),
+      clientMutationId: EntityId.forContext(
+        'recommendation:${service.id}:${user.id}',
+      ),
+      publicationId: service.id,
+      userId: user.id,
+      userAlias: user.alias,
+      comment: comment,
+      allowUpdateExisting: allowUpdateExisting,
+    );
+
+    await outboxSyncService.syncPendingForUser(
+      user.id,
+      onlyOperationId: rec.clientMutationId,
+    );
+    await refreshAllLocalData();
+    _statusBannerMessage =
+        'Tu opinión vecinal quedó registrada en la ficha del servicio.';
+    notifyListeners();
+    return rec;
+  }
+
+  Future<void> withdrawServiceRecommendation(Publication service) async {
+    final user = _currentUser;
+    if (user == null) return;
+    await database.withdrawRecommendation(
+      publicationId: service.id,
+      userId: user.id,
+    );
+    await outboxSyncService.syncPendingForUser(user.id);
+    await refreshAllLocalData();
+    _statusBannerMessage = 'Retiraste tu recomendación de este servicio.';
+    notifyListeners();
+  }
+
+  /// Clic 3 en `Buscar servicios` -> abrir ficha -> escribir mensaje y `Enviar solicitud de contacto`.
+  Future<ConversationThread> requestContactWithProvider({
+    required Publication publication,
+    required String initialMessage,
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      _pendingAuthIntent = PendingAuthIntent(
+        description: 'Contactar a ${publication.authorAlias}',
+        targetRoute: 'detalle_servicio',
+        publicationId: publication.id,
+      );
+      navigateTo(AppSection.autenticacion);
+      throw StateError('Inicia sesión para contactar a este vecino.');
+    }
+
+    final cleanMessage = initialMessage.trim().isEmpty
+        ? 'Hola ${publication.authorAlias}, vi tu publicación en el barrio y quisiera coordinar.'
+        : initialMessage.trim();
+
+    final thread = await database.openOrGetConversation(
+      id: EntityId.forContext('conversation:${publication.id}:${user.id}'),
+      clientMutationId: EntityId.forContext(
+        'conversation:${publication.id}:${user.id}',
+      ),
+      publication: publication,
+      participantId: user.id,
+      participantAlias: user.alias,
+    );
+
+    await database.saveDraft(
+      FormDraft(
+        draftKey: 'chat_${thread.id}',
+        ownerUserId: user.id,
+        kind: publication.kind,
+        title: 'Mensaje de contacto',
+        description: cleanMessage,
+        updatedAt: DateTime.now().toUtc(),
+      ),
+    );
+    await outboxSyncService.syncPendingForUser(
+      user.id,
+      onlyOperationId: thread.clientMutationId,
+    );
+
+    // Regla del encargo: los mensajes de chat requieren conexión activa;
+    // si está offline, no se fingen enviados y se conserva el texto como borrador.
+    if (remoteGateway.simulateNetworkOffline) {
+      await database.saveDraft(
+        FormDraft(
+          draftKey: 'chat_${thread.id}',
+          ownerUserId: user.id,
+          kind: publication.kind,
+          title: 'Mensaje para ${publication.authorAlias}',
+          description: cleanMessage,
+          updatedAt: DateTime.now().toUtc(),
+        ),
+      );
+      _selectedConversation = thread;
+      await refreshAllLocalData();
+      _statusBannerMessage = 'Sin conexión: la conversación quedó preparada y tu mensaje se guardó como borrador para enviarlo al reconectar.';
+      navigateTo(AppSection.chatConversacion);
+      return thread;
+    }
+
+    final msgId = EntityId.create();
+    final msgMutationId = EntityId.create();
+
+    await remoteGateway.sendRealtimeMessage(
+      id: msgId,
+      clientMutationId: msgMutationId,
+      conversationId: thread.id,
+      senderId: user.id,
+      senderAlias: user.alias,
+      body: cleanMessage,
+    );
+
+    await database.recordOnlineMessage(
+      id: msgId,
+      clientMutationId: msgMutationId,
+      conversationId: thread.id,
+      senderId: user.id,
+      senderAlias: user.alias,
+      body: cleanMessage,
+      syncStatus: SyncStatus.confirmado,
+    );
+
+    await database.deleteDraft(
+      ownerUserId: user.id,
+      draftKey: 'chat_${thread.id}',
+    );
+    _selectedConversation = thread;
+    await refreshAllLocalData();
+    _statusBannerMessage =
+        'Solicitud de contacto enviada a ${publication.authorAlias}.';
+    navigateTo(AppSection.chatConversacion);
+    return thread;
+  }
+
+  /// Clic 3 en `Ver favores y ayudar` -> abrir solicitud -> nota opcional y `Enviar oferta de ayuda`.
+  Future<HelpOffer> submitOfferToHelp({
+    required Publication publication,
+    required String note,
+    String resourceShared = '',
+    bool explicitShareConsent = false,
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      _pendingAuthIntent = PendingAuthIntent(
+        description: 'Ofrecer ayuda a ${publication.authorAlias}',
+        targetRoute: 'detalle_favor',
+        publicationId: publication.id,
+      );
+      navigateTo(AppSection.autenticacion);
+      throw StateError('Inicia sesión para ofrecer tu ayuda.');
+    }
+
+    final cleanNote = note.trim().isEmpty
+        ? 'Hola ${publication.authorAlias}, soy vecino de ${user.sector} y puedo ayudarte gratuitamente.'
+        : note.trim();
+
+    final offer = await database.submitHelpOffer(
+      id: EntityId.forContext('offer:${publication.id}:${user.id}'),
+      clientMutationId: EntityId.forContext(
+        'offer:${publication.id}:${user.id}',
+      ),
+      publicationId: publication.id,
+      helperId: user.id,
+      helperAlias: user.alias,
+      note: cleanNote,
+      resourceShared: resourceShared,
+      explicitShareConsent: explicitShareConsent,
+    );
+
+    await outboxSyncService.syncPendingForUser(
+      user.id,
+      onlyOperationId: offer.clientMutationId,
+    );
+
+    await refreshAllLocalData();
+    _statusBannerMessage = offer.syncStatus.isConfirmed
+        ? 'Oferta solidaria enviada y confirmada.'
+        : 'Sin conexión: tu oferta de ayuda se guardó en este teléfono (Pendiente de sincronizar).';
+    notifyListeners();
+    return offer;
+  }
+
+  /// Cambia el estado de una publicación propia (`abierta` -> `en_coordinacion` -> `resuelta` / `cancelada`).
+  Future<Publication> updatePublicationStatus({
+    required String publicationId,
+    required PublicationStatus newStatus,
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      throw StateError('Inicia sesión para gestionar tus publicaciones.');
+    }
+    final updated = await database.transitionPublicationStatus(
+      publicationId: publicationId,
+      actingUserId: user.id,
+      newStatus: newStatus,
+    );
+    await outboxSyncService.syncPendingForUser(user.id);
+    await refreshAllLocalData();
+    _statusBannerMessage = 'Estado actualizado a "${newStatus.label}".';
+    notifyListeners();
+    return updated;
+  }
+
+  /// Envía un mensaje dentro de una conversación privada existente.
+  /// Si está offline, bloquea el envío ficticio, informa que requiere conexión
+  /// y conserva el texto como borrador local.
+  Future<void> sendChatMessageInThread({
+    required ConversationThread thread,
+    required String text,
+  }) async {
+    final user = _currentUser;
+    if (user == null) {
+      throw StateError('Inicia sesión para enviar mensajes.');
+    }
+    final clean = text.trim();
+    if (clean.isEmpty) {
+      throw StateError('Escribe un mensaje antes de enviar.');
+    }
+
+    if (remoteGateway.simulateNetworkOffline) {
+      await database.saveDraft(
+        FormDraft(
+          draftKey: 'chat_${thread.id}',
+          ownerUserId: user.id,
+          kind: PublicationKind.servicio,
+          title: 'Borrador de chat con ${thread.publicationAuthorAlias}',
+          description: clean,
+          updatedAt: DateTime.now().toUtc(),
+        ),
+      );
+      await refreshAllLocalData();
+      throw StateError(
+        'Los mensajes de chat requieren conexión activa y no se envían sin internet. Conservamos tu texto como borrador.',
+      );
+    }
+
+    await database.saveDraft(
+      FormDraft(
+        draftKey: 'chat_${thread.id}',
+        ownerUserId: user.id,
+        kind: PublicationKind.servicio,
+        title: 'Mensaje',
+        description: clean,
+        updatedAt: DateTime.now().toUtc(),
+      ),
+    );
+    final msgId = EntityId.create();
+    final mutId = EntityId.create();
+
+    await remoteGateway.sendRealtimeMessage(
+      id: msgId,
+      clientMutationId: mutId,
+      conversationId: thread.id,
+      senderId: user.id,
+      senderAlias: user.alias,
+      body: clean,
+    );
+
+    await database.recordOnlineMessage(
+      id: msgId,
+      clientMutationId: mutId,
+      conversationId: thread.id,
+      senderId: user.id,
+      senderAlias: user.alias,
+      body: clean,
+      syncStatus: SyncStatus.confirmado,
+    );
+
+    await database.deleteDraft(
+      ownerUserId: user.id,
+      draftKey: 'chat_${thread.id}',
+    );
+    await refreshAllLocalData();
+  }
+
+  void openConversation(ConversationThread thread) {
+    _selectedConversation = thread;
+    navigateTo(AppSection.chatConversacion);
+  }
+
+  /// Actualiza filtros del directorio de servicios
+  void updateServiceFilters({
+    String? searchQuery,
+    String? category,
+    double? radiusMeters,
+    bool clearRadius = false,
+    bool? mapQuadrantView,
+  }) {
+    if (searchQuery != null) _serviceSearchQuery = searchQuery;
+    if (category != null) _serviceCategoryFilter = category;
+    if (clearRadius) {
+      _serviceRadiusMeters = null;
+    } else if (radiusMeters != null) {
+      _serviceRadiusMeters = radiusMeters;
+    }
+    if (mapQuadrantView != null) _serviceMapQuadrantView = mapQuadrantView;
+    notifyListeners();
+  }
+
+  List<Publication> get filteredServices {
+    return _publications.where((p) {
+      if (!p.kind.isService) return false;
+      if (_serviceCategoryFilter != 'todos' &&
+          p.category != _serviceCategoryFilter) {
+        return false;
+      }
+      if (_serviceSearchQuery.trim().isNotEmpty) {
+        final q = _serviceSearchQuery.trim().toLowerCase();
+        final match =
+            p.title.toLowerCase().contains(q) ||
+            p.description.toLowerCase().contains(q) ||
+            p.authorAlias.toLowerCase().contains(q) ||
+            p.sector.toLowerCase().contains(q);
+        if (!match) return false;
+      }
+      if (_serviceRadiusMeters != null && _serviceRadiusMeters! > 0) {
+        final dist = p.distanceFrom(lat: activeLat, lng: activeLng);
+        if (dist > _serviceRadiusMeters!) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  void updateFavorFilters({
+    String? category,
+    PublicationStatus? status,
+    bool clearStatus = false,
+  }) {
+    if (category != null) _favorCategoryFilter = category;
+    if (clearStatus) {
+      _favorStatusFilter = null;
+    } else if (status != null) {
+      _favorStatusFilter = status;
+    }
+    notifyListeners();
+  }
+
+  List<Publication> get filteredFavors {
+    return _publications.where((p) {
+      if (!p.kind.isSolidarityFavor) return false;
+      if (_favorCategoryFilter != 'todos' &&
+          p.category != _favorCategoryFilter) {
+        return false;
+      }
+      if (_favorStatusFilter != null && p.status != _favorStatusFilter) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  List<Publication> get emergencyPublications {
+    return _publications.where((p) => p.kind.isEmergency).toList();
+  }
+
+  List<Publication> get myPublications {
+    final uid = _currentUser?.id;
+    if (uid == null) return const [];
+    return _publications.where((p) => p.authorId == uid).toList();
+  }
+
+  /// Reintento manual de toda la cola Outbox o de una operación específica.
+  Future<OutboxSyncSummary> retryOutboxSync({String? onlyOperationId}) async {
+    final user = _currentUser;
+    if (user == null) {
+      return const OutboxSyncSummary(
+        confirmedCount: 0,
+        pendingCount: 0,
+        errorCount: 0,
+        conflictCount: 0,
+        lastMessage: 'Inicia sesión para sincronizar.',
+      );
+    }
+    final summary = await outboxSyncService.syncPendingForUser(
+      user.id,
+      onlyOperationId: onlyOperationId,
+    );
+    _statusBannerMessage = summary.lastMessage.isNotEmpty
+        ? summary.lastMessage
+        : 'Reintento completado.';
+    await refreshAllLocalData();
+    unawaited(refreshFromServer());
+    return summary;
+  }
+
+  Future<void> keepDraftAndLoadServer(String publicationId) async {
+    final user = _currentUser;
+    if (user == null) {
+      throw StateError('Inicia sesión para revisar tus cambios.');
+    }
+    final remote = await remoteGateway.fetchOwnPublication(publicationId);
+    if (_currentUser?.id != user.id) {
+      throw StateError('La sesión cambió. Vuelve a intentarlo.');
+    }
+    await database.keepDraftAndAcceptRemote(remote, user.id);
+    _statusBannerMessage = 'Se cargó la versión del barrio. Conservamos tu texto anterior en Borradores.';
+    await refreshAllLocalData();
+  }
+
+  /// Registro de nueva cuenta vecinal y reanudación de intención pendiente.
+  Future<void> registerAndSignIn({
+    required String alias,
+    required String email,
+    required String password,
+    required String neighborhood,
+    required String sector,
+    required double approxLat,
+    required double approxLng,
+    required bool useGpsApprox,
+  }) async {
+    final profile = await remoteGateway.registerAccount(
+      alias: alias,
+      email: email,
+      password: password,
+      neighborhood: neighborhood,
+      sector: sector,
+      approxLat: approxLat,
+      approxLng: approxLng,
+      useGpsApprox: useGpsApprox,
+    );
+    _currentUser = profile;
+    await database.saveUserProfile(profile, queueSync: true);
+    await outboxSyncService.syncPendingForUser(profile.id);
+    await refreshAllLocalData();
+    _resumePendingIntentOrGoHome();
+    unawaited(refreshFromServer());
+  }
+
+  /// Inicio de sesión y reanudación automática de intención pendiente.
+  Future<void> signIn({required String email, required String password}) async {
+    final profile = await remoteGateway.signInAccount(
+      email: email,
+      password: password,
+    );
+    _currentUser = profile;
+    await database.saveUserProfile(profile, queueSync: false);
+    await refreshAllLocalData();
+    _resumePendingIntentOrGoHome();
+    unawaited(refreshFromServer());
+  }
+
+  /// Cierre de sesión seguro: limpia caché privada de conversaciones/mensajes
+  /// del usuario saliente y preserva sus operaciones pendientes aisladas por
+  /// `owner_user_id`.
+  Future<void> signOut() async {
+    final previousId = _currentUser?.id;
+    await remoteGateway.signOutAccount();
+    if (previousId != null) {
+      await database.clearPrivateCacheOnSignOut(previousId);
+    }
+    _currentUser = null;
+    _selectedConversation = null;
+    await refreshAllLocalData();
+    goHome();
+  }
+
+  /// Actualiza la zona manual o preferencia de GPS aproximado sin bloquear al
+  /// usuario que rechaza el permiso de ubicación.
+  Future<void> updateLocationPreference({
+    required String neighborhood,
+    required String sector,
+    required double approxLat,
+    required double approxLng,
+    required bool useGpsApprox,
+  }) async {
+    _selectedManualNeighborhood = neighborhood;
+    _selectedManualSector = sector;
+    _selectedManualLat = AppConfig.roundPublicCoordinate(approxLat);
+    _selectedManualLng = AppConfig.roundPublicCoordinate(approxLng);
+
+    if (_currentUser != null) {
+      final updated = _currentUser!.copyWith(
+        neighborhood: neighborhood,
+        sector: sector,
+        approxLat: _selectedManualLat,
+        approxLng: _selectedManualLng,
+        useGpsApprox: useGpsApprox,
+        updatedAt: DateTime.now().toUtc(),
+      );
+      _currentUser = updated;
+      await database.saveUserProfile(updated, queueSync: true);
+      await outboxSyncService.syncPendingForUser(updated.id);
+    }
+    await refreshAllLocalData();
+  }
+
+  void _resumePendingIntentOrGoHome() {
+    final intent = _pendingAuthIntent;
+    _pendingAuthIntent = null;
+    if (intent == null) {
+      goHome();
+      return;
+    }
+
+    if (intent.targetRoute == 'publicar' && intent.presetKind != null) {
+      _publishPresetKind = intent.presetKind!;
+      _publishTypeLocked = intent.lockType;
+      navigateTo(AppSection.publicarRapido);
+      return;
+    }
+
+    if (intent.publicationId != null) {
+      final match = _publications
+          .where((p) => p.id == intent.publicationId)
+          .toList();
+      if (match.isNotEmpty) {
+        _selectedPublication = match.first;
+        navigateTo(
+          match.first.kind.isService
+              ? AppSection.detalleServicio
+              : AppSection.detalleFavor,
+        );
+        return;
+      }
+    }
+
+    goHome();
+  }
+}
