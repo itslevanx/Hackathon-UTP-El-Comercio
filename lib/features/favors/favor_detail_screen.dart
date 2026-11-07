@@ -1,3 +1,5 @@
+import '../../core/accessibility/text_input_support.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/models/domain_models.dart';
@@ -119,6 +121,7 @@ class _FavorDetailScreenState extends State<FavorDetailScreen> {
     final isAuthor = c.currentUser?.id == fav.authorId;
 
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -295,6 +298,8 @@ class _FavorDetailScreenState extends State<FavorDetailScreen> {
                   ),
                   const SizedBox(height: 10),
                   TextField(
+                    contextMenuBuilder: buildTextSelectionToolbar,
+                    onTapOutside: dismissTextInput,
                     key: const Key('input_favor_offer_note'),
                     controller: _noteController,
                     maxLines: 2,
@@ -307,6 +312,8 @@ class _FavorDetailScreenState extends State<FavorDetailScreen> {
                   if (fav.kind.isEmergency) ...[
                     const SizedBox(height: 10),
                     TextField(
+                      contextMenuBuilder: buildTextSelectionToolbar,
+                      onTapOutside: dismissTextInput,
                       key: const Key('input_favor_resource_shared'),
                       controller: _resourceController,
                       onChanged: (_) => setState(() {}),

@@ -1,3 +1,5 @@
+import '../../core/accessibility/text_input_support.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/models/domain_models.dart';
@@ -155,6 +157,7 @@ class _PublishScreenState extends State<PublishScreen> {
     final submitted = c.lastSubmittedPublication;
 
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -251,6 +254,8 @@ class _PublishScreenState extends State<PublishScreen> {
 
                 const SizedBox(height: 16),
                 TextField(
+                  contextMenuBuilder: buildTextSelectionToolbar,
+                  onTapOutside: dismissTextInput,
                   key: const Key('input_publish_title'),
                   controller: _titleController,
                   onChanged: (_) => _persistDraftSilently(),
@@ -266,6 +271,8 @@ class _PublishScreenState extends State<PublishScreen> {
                 ),
                 const SizedBox(height: 14),
                 TextField(
+                  contextMenuBuilder: buildTextSelectionToolbar,
+                  onTapOutside: dismissTextInput,
                   key: const Key('input_publish_description'),
                   controller: _descController,
                   maxLines: 3,
@@ -279,6 +286,8 @@ class _PublishScreenState extends State<PublishScreen> {
                 if (_selectedKind == PublicationKind.servicio) ...[
                   const SizedBox(height: 14),
                   TextField(
+                    contextMenuBuilder: buildTextSelectionToolbar,
+                    onTapOutside: dismissTextInput,
                     key: const Key('input_publish_availability'),
                     controller: _availabilityController,
                     onChanged: (_) => _persistDraftSilently(),

@@ -1,3 +1,5 @@
+import '../../core/accessibility/text_input_support.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/models/domain_models.dart';
@@ -143,6 +145,7 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
     final hasMyRecommendation = myRec.isNotEmpty;
 
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -285,6 +288,8 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                 ),
                 const SizedBox(height: 10),
                 TextField(
+                  contextMenuBuilder: buildTextSelectionToolbar,
+                  onTapOutside: dismissTextInput,
                   key: const Key('input_service_contact_message'),
                   controller: _contactMsgController,
                   maxLines: 2,
@@ -347,6 +352,8 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  contextMenuBuilder: buildTextSelectionToolbar,
+                  onTapOutside: dismissTextInput,
                   key: const Key('input_service_recommendation_comment'),
                   controller: _recCommentController,
                   style: const TextStyle(fontSize: 18),

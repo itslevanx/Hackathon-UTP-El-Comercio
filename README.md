@@ -95,7 +95,7 @@ node --check protipo/prototype.js
 node --check protipo/practice.js
 ```
 
-La revisión actual cuenta con 19 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y cero advertencias. El aviso informativo de la tabla privada de recibos corresponde a su acceso cerrado a clientes.
+La revisión actual cuenta con 21 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y cero advertencias. El aviso informativo de la tabla privada de recibos corresponde a su acceso cerrado a clientes.
 
 La app se compiló y abrió en un simulador iPhone con iOS 27.1, donde se completaron las cinco misiones del simulacro de sismo. Todavía falta comprobar las conversaciones y la sincronización entre sesiones reales, GPS, VoiceOver y TalkBack. No hay APK validado: falta instalar el Android SDK en el entorno de revisión.
 

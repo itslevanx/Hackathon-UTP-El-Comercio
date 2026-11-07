@@ -1,3 +1,5 @@
+import '../../core/accessibility/text_input_support.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -20,6 +22,7 @@ class ChatListScreen extends StatelessWidget {
     final threads = controller.userConversations;
 
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -236,6 +239,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     }
 
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -370,6 +374,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     ),
                 const SizedBox(height: 12),
                 TextField(
+                  contextMenuBuilder: buildTextSelectionToolbar,
+                  onTapOutside: dismissTextInput,
                   key: const Key('input_chat_message_body'),
                   controller: _msgController,
                   maxLines: 2,

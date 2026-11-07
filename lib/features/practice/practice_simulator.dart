@@ -1,3 +1,5 @@
+import '../../core/accessibility/text_input_support.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/database/local_sqlite_database.dart';
@@ -428,6 +430,8 @@ class _PracticeSimulatorScreenState extends State<PracticeSimulatorScreen> {
 
             Expanded(
               child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
                 child: !_repo.practiceStarted
                     ? _buildScenarioSelectorLanding()
@@ -749,6 +753,8 @@ class _PracticeSimulatorScreenState extends State<PracticeSimulatorScreen> {
                 )
               else ...[
                 TextField(
+                  contextMenuBuilder: buildTextSelectionToolbar,
+                  onTapOutside: dismissTextInput,
                   key: const Key('input_practice_report_title'),
                   controller: _reportTitleCtrl,
                   style: const TextStyle(fontSize: 18),
@@ -801,6 +807,8 @@ class _PracticeSimulatorScreenState extends State<PracticeSimulatorScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextField(
+                contextMenuBuilder: buildTextSelectionToolbar,
+                onTapOutside: dismissTextInput,
                 key: const Key('input_practice_chat_message'),
                 controller: _chatCtrl,
                 style: const TextStyle(fontSize: 18),

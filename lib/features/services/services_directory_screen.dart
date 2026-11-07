@@ -1,3 +1,5 @@
+import '../../core/accessibility/text_input_support.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/models/domain_models.dart';
@@ -33,6 +35,7 @@ class ServicesDirectoryScreen extends StatelessWidget {
     final services = controller.filteredServices;
 
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -62,6 +65,8 @@ class ServicesDirectoryScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  contextMenuBuilder: buildTextSelectionToolbar,
+                  onTapOutside: dismissTextInput,
                   key: const Key('input_search_services'),
                   onChanged: (q) =>
                       controller.updateServiceFilters(searchQuery: q),

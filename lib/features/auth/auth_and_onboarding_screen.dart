@@ -1,3 +1,5 @@
+import '../../core/accessibility/text_input_support.dart';
+
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 
@@ -113,6 +115,7 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
   }
 
   Future<void> _handleAuthSubmit() async {
+    FocusScope.of(context).unfocus();
     setState(() => _errorMessage = null);
     try {
       final zone = _currentZoneConfig;
@@ -175,6 +178,7 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
         AppConfig.zonesByDistrict[AppConfig.defaultNeighborhood]!;
 
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -413,6 +417,8 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
                 const SizedBox(height: 14),
                 if (_isRegisterMode) ...[
                   TextField(
+                    contextMenuBuilder: buildTextSelectionToolbar,
+                    onTapOutside: dismissTextInput,
                     key: const Key('input_auth_alias'),
                     controller: _aliasController,
                     style: const TextStyle(fontSize: 18),
@@ -424,6 +430,8 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
                   const SizedBox(height: 12),
                 ],
                 TextField(
+                  contextMenuBuilder: buildTextSelectionToolbar,
+                  onTapOutside: dismissTextInput,
                   key: const Key('input_auth_email'),
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -434,6 +442,8 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  contextMenuBuilder: buildTextSelectionToolbar,
+                  onTapOutside: dismissTextInput,
                   key: const Key('input_auth_password'),
                   controller: _passwordController,
                   obscureText: true,

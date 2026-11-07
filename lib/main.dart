@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/accessibility/accessibility_controller.dart';
+import 'core/accessibility/text_input_support.dart';
 import 'core/config/app_config.dart';
 import 'core/database/local_sqlite_database.dart';
 import 'core/state/app_controller.dart';
@@ -127,12 +128,16 @@ class _MainCivicShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final section = controller.currentSection;
     final showBack = section != AppSection.inicio;
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     if (section == AppSection.practicaSimulacro) {
       return Scaffold(
         body: SafeArea(
-          child: PracticeSimulatorScreen(
-            database: controller.database,
-            onExitPractice: controller.goHome,
+          child: KeyboardDismissibleBody(
+            keyboardVisible: keyboardVisible,
+            child: PracticeSimulatorScreen(
+              database: controller.database,
+              onExitPractice: controller.goHome,
+            ),
           ),
         ),
       );
@@ -152,7 +157,12 @@ class _MainCivicShell extends StatelessWidget {
         isOffline: controller.isOfflineMode,
         onProfileTap: () => controller.navigateTo(AppSection.misActividades),
       ),
-      body: SafeArea(child: _buildActiveSectionBody()),
+      body: SafeArea(
+        child: KeyboardDismissibleBody(
+          keyboardVisible: keyboardVisible,
+          child: _buildActiveSectionBody(),
+        ),
+      ),
       bottomNavigationBar: _buildAccessibleBottomNav(),
     );
   }
