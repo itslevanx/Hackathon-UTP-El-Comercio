@@ -46,6 +46,10 @@ enum AppSection {
 /// Controlador central de estado de la aplicación comunitaria NEXO.
 class AppController extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _syncTimer;
+  StreamSubscription<void>? _authSubscription;
+  bool _authActionInProgress = false;
+  bool _restoringAuthSession = false;
+  int _authEpoch = 0;
   bool _refreshingRemote = false;
   bool _disposed = false;
   AppController({
@@ -177,7 +181,21 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
     await refreshAllLocalData();
     _initialized = true;
+    _authSubscription = remoteGateway.signedInSessionChanges.listen(
+      (_) {
+        if (!_authActionInProgress) unawaited(_restoreSessionFromLink());
+      },
+      onError: (Object error) {
+        if (_disposed) return;
+        _statusBannerMessage =
+            'No se pudo completar la confirmación. Vuelve a iniciar sesión.';
+        notifyListeners();
+      },
+    );
     if (remoteGateway.isLiveSupabaseConnected && !remoteGateway.isTestDouble) {
+      if (startWithActiveSession && _currentUser == null) {
+        unawaited(_restoreSessionFromLink());
+      }
       WidgetsBinding.instance.addObserver(this);
       _syncTimer = Timer.periodic(
         const Duration(seconds: 30),
@@ -220,6 +238,43 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _restoreSessionFromLink() async {
+    if (_disposed || _restoringAuthSession || _authActionInProgress) return;
+    _restoringAuthSession = true;
+    final epoch = _authEpoch;
+    try {
+      final profile = await remoteGateway.getCurrentSessionProfile();
+      if (_disposed ||
+          epoch != _authEpoch ||
+          _authActionInProgress ||
+          profile == null ||
+          _currentUser?.id == profile.id) {
+        return;
+      }
+      final previousId = _currentUser?.id;
+      if (previousId != null) {
+        await database.clearPrivateCacheOnSignOut(previousId);
+      }
+      if (_disposed || epoch != _authEpoch) return;
+      _selectedConversation = null;
+      _currentUser = profile;
+      await database.saveUserProfile(profile, queueSync: false);
+      if (_disposed || epoch != _authEpoch) return;
+      await refreshAllLocalData();
+      if (_disposed || epoch != _authEpoch) return;
+      _resumePendingIntentOrGoHome();
+      unawaited(refreshFromServer());
+    } catch (_) {
+      if (!_disposed) {
+        _statusBannerMessage =
+            'Correo confirmado. Inicia sesión para entrar al barrio.';
+        notifyListeners();
+      }
+    } finally {
+      _restoringAuthSession = false;
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) unawaited(refreshFromServer());
@@ -229,6 +284,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     _disposed = true;
     _syncTimer?.cancel();
+    unawaited(_authSubscription?.cancel());
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -875,41 +931,54 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     required double approxLng,
     required bool useGpsApprox,
   }) async {
-    final profile = await remoteGateway.registerAccount(
-      alias: alias,
-      email: email,
-      password: password,
-      neighborhood: neighborhood,
-      sector: sector,
-      approxLat: approxLat,
-      approxLng: approxLng,
-      useGpsApprox: useGpsApprox,
-    );
-    _currentUser = profile;
-    await database.saveUserProfile(profile, queueSync: true);
-    await outboxSyncService.syncPendingForUser(profile.id);
-    await refreshAllLocalData();
-    _resumePendingIntentOrGoHome();
-    unawaited(refreshFromServer());
+    _authActionInProgress = true;
+    _authEpoch++;
+    try {
+      final profile = await remoteGateway.registerAccount(
+        alias: alias,
+        email: email,
+        password: password,
+        neighborhood: neighborhood,
+        sector: sector,
+        approxLat: approxLat,
+        approxLng: approxLng,
+        useGpsApprox: useGpsApprox,
+      );
+      _currentUser = profile;
+      await database.saveUserProfile(profile, queueSync: true);
+      await outboxSyncService.syncPendingForUser(profile.id);
+      await refreshAllLocalData();
+      _resumePendingIntentOrGoHome();
+      unawaited(refreshFromServer());
+    } finally {
+      _authActionInProgress = false;
+    }
   }
 
   /// Inicio de sesión y reanudación automática de intención pendiente.
   Future<void> signIn({required String email, required String password}) async {
-    final profile = await remoteGateway.signInAccount(
-      email: email,
-      password: password,
-    );
-    _currentUser = profile;
-    await database.saveUserProfile(profile, queueSync: false);
-    await refreshAllLocalData();
-    _resumePendingIntentOrGoHome();
-    unawaited(refreshFromServer());
+    _authActionInProgress = true;
+    _authEpoch++;
+    try {
+      final profile = await remoteGateway.signInAccount(
+        email: email,
+        password: password,
+      );
+      _currentUser = profile;
+      await database.saveUserProfile(profile, queueSync: false);
+      await refreshAllLocalData();
+      _resumePendingIntentOrGoHome();
+      unawaited(refreshFromServer());
+    } finally {
+      _authActionInProgress = false;
+    }
   }
 
   /// Cierre de sesión seguro: limpia caché privada de conversaciones/mensajes
   /// del usuario saliente y preserva sus operaciones pendientes aisladas por
   /// `owner_user_id`.
   Future<void> signOut() async {
+    _authEpoch++;
     final previousId = _currentUser?.id;
     await remoteGateway.signOutAccount();
     if (previousId != null) {

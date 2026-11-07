@@ -22,6 +22,17 @@ class AppConfig {
     defaultValue: '',
   );
 
+  static const String authRedirectUrl = 'pe.vecinos.app://auth-callback';
+
+  static bool isAuthCallbackUri(Uri uri) {
+    final callback = Uri.parse(authRedirectUrl);
+    return uri.scheme == callback.scheme &&
+        uri.host == callback.host &&
+        uri.path == callback.path &&
+        uri.userInfo.isEmpty &&
+        !uri.hasPort;
+  }
+
   static bool get isSupabaseConfigured =>
       supabaseUrl.trim().isNotEmpty &&
       supabaseAnonKey.trim().isNotEmpty &&

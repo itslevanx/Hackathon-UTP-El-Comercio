@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:hackathon_utp_el_comercio/core/accessibility/accessibility_controller.dart';
+import 'package:hackathon_utp_el_comercio/core/config/app_config.dart';
 import 'package:hackathon_utp_el_comercio/core/database/local_sqlite_database.dart';
 import 'package:hackathon_utp_el_comercio/core/models/domain_models.dart';
 import 'package:hackathon_utp_el_comercio/core/models/entity_id.dart';
@@ -14,6 +16,75 @@ import 'package:hackathon_utp_el_comercio/main.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('El retorno de autenticación rechaza enlaces ajenos', () {
+    expect(
+      AppConfig.isAuthCallbackUri(
+        Uri.parse('${AppConfig.authRedirectUrl}?code=example-code'),
+      ),
+      isTrue,
+    );
+    for (final url in [
+      'https://auth-callback?code=example-code',
+      'pe.vecinos.app://another-host?code=example-code',
+      'pe.vecinos.app://auth-callback/another-path?code=example-code',
+      'pe.vecinos.app://user@auth-callback?code=example-code',
+      'pe.vecinos.app://auth-callback:8080?code=example-code',
+    ]) {
+      expect(AppConfig.isAuthCallbackUri(Uri.parse(url)), isFalse);
+    }
+  });
+
+  test('Confirmar el correo retoma la acción pendiente en la app', () async {
+    final remote = _AuthLinkGateway();
+    final db = LocalSqliteDatabase(engine: InMemoryTransactionalStoreEngine());
+    final controller = AppController(
+      database: db,
+      remoteGateway: remote,
+      outboxSyncService: OutboxSyncService(database: db, remoteGateway: remote),
+    );
+    await controller.initialize(startWithActiveSession: false);
+    controller.openQuickPublish(
+      presetKind: PublicationKind.emergenciaSolicitud,
+      lockTypeForTwoClickFlow: true,
+    );
+    expect(controller.currentSection, AppSection.autenticacion);
+    final restored = Completer<void>();
+    controller.addListener(() {
+      if (controller.currentSection == AppSection.publicarRapido &&
+          !restored.isCompleted) {
+        restored.complete();
+      }
+    });
+    remote.loadSession = () async => _confirmedProfile;
+    remote.events.add(null);
+    await restored.future.timeout(const Duration(seconds: 2));
+    expect(controller.currentUser?.id, _confirmedProfile.id);
+    expect(controller.publishPresetKind, PublicationKind.emergenciaSolicitud);
+    expect(await db.listOutboxForUser(_confirmedProfile.id), isEmpty);
+    controller.dispose();
+    await remote.events.close();
+  });
+
+  test('Un retorno tardío no restaura una sesión que ya se cerró', () async {
+    final remote = _AuthLinkGateway();
+    final db = LocalSqliteDatabase(engine: InMemoryTransactionalStoreEngine());
+    final controller = AppController(
+      database: db,
+      remoteGateway: remote,
+      outboxSyncService: OutboxSyncService(database: db, remoteGateway: remote),
+    );
+    await controller.initialize(startWithActiveSession: false);
+    final delayedProfile = Completer<UserProfile?>();
+    remote.loadSession = () => delayedProfile.future;
+    remote.events.add(null);
+    await controller.signOut();
+    delayedProfile.complete(_confirmedProfile);
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.currentUser, isNull);
+    expect(controller.currentSection, AppSection.inicio);
+    controller.dispose();
+    await remote.events.close();
+  });
   test('Sin backend no hay login ficticio ni confirmación de envío', () async {
     final remote = SupabaseRemoteGateway();
     expect(
@@ -289,4 +360,24 @@ void main() {
       controller.dispose();
     },
   );
+}
+
+final _confirmedProfile = UserProfile(
+  id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  alias: 'Vecino de prueba',
+  neighborhood: 'Pueblo Libre',
+  sector: 'Sector San Martín',
+  updatedAt: DateTime.utc(2026, 11, 7),
+);
+
+class _AuthLinkGateway extends SupabaseRemoteGateway {
+  _AuthLinkGateway() : super(forceSupabaseAvailable: false);
+  final events = StreamController<void>.broadcast(sync: true);
+  Future<UserProfile?> Function()? loadSession;
+
+  @override
+  Stream<void> get signedInSessionChanges => events.stream;
+
+  @override
+  Future<UserProfile?> getCurrentSessionProfile() async => loadSession?.call();
 }

@@ -142,6 +142,13 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
 
   SupabaseClient get _client => Supabase.instance.client;
 
+  Stream<void> get signedInSessionChanges {
+    if (isTestDouble || !isLiveSupabaseConnected) return const Stream.empty();
+    return _client.auth.onAuthStateChange
+        .where((state) => state.event == AuthChangeEvent.signedIn)
+        .map((_) {});
+  }
+
   @override
   Future<UserProfile?> getCurrentSessionProfile() async {
     if (isLiveSupabaseConnected) {
@@ -246,6 +253,7 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
       final response = await _client.auth.signUp(
         email: cleanEmail,
         password: password,
+        emailRedirectTo: AppConfig.authRedirectUrl,
         data: {
           'alias': cleanAlias,
           'neighborhood': neighborhood,

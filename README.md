@@ -57,6 +57,12 @@ flutter run --dart-define-from-file=.env.local.json
 
 Sin configuración remota, los simulacros siguen disponibles. La app no crea sesiones ficticias ni presenta envíos locales como confirmados.
 
+## Confirmación de correo en el teléfono
+
+En Supabase, abre **Authentication → URL Configuration** y configura `pe.vecinos.app://auth-callback` como **Site URL** y como una entrada exacta en **Redirect URLs**. Se necesita una cuenta con permisos para editar esa configuración.
+
+El enlace abre la app instalada en el teléfono; no requiere desplegar una página web. Para recibirlo hay que instalar una compilación que incluya el esquema de retorno. Los correos anteriores pueden seguir apuntando a `localhost`: si el correo ya se confirmó, inicia sesión con la cuenta existente.
+
 ## Base de datos
 
 Las migraciones están en `supabase/migrations/` y deben aplicarse en orden sobre un proyecto Supabase. Crean las tablas, los permisos, los procedimientos de búsqueda y el canal de mensajes. PostGIS se instala en el esquema `extensions`, fuera de la API pública.
@@ -89,7 +95,7 @@ node --check protipo/prototype.js
 node --check protipo/practice.js
 ```
 
-La revisión actual cuenta con 16 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y cero advertencias. El aviso informativo de la tabla privada de recibos corresponde a su acceso cerrado a clientes.
+La revisión actual cuenta con 19 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y cero advertencias. El aviso informativo de la tabla privada de recibos corresponde a su acceso cerrado a clientes.
 
 La app se compiló y abrió en un simulador iPhone con iOS 27.1, donde se completaron las cinco misiones del simulacro de sismo. Todavía falta comprobar las conversaciones y la sincronización entre sesiones reales, GPS, VoiceOver y TalkBack. No hay APK validado: falta instalar el Android SDK en el entorno de revisión.
 

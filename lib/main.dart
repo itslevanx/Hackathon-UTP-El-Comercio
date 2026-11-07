@@ -29,6 +29,9 @@ Future<void> main() async {
       await Supabase.initialize(
         url: AppConfig.supabaseUrl,
         publishableKey: AppConfig.supabaseAnonKey,
+        authOptions: FlutterAuthClientOptions(
+          detectSessionInUriPredicate: AppConfig.isAuthCallbackUri,
+        ),
       );
     } catch (_) {
       // Si el dispositivo arranca en modo avión desde primera instalación,
