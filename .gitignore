@@ -85,3 +85,6 @@ venv/
 
 # Se deben versionar los archivos de bloqueo de dependencias de la app
 # (por ejemplo pubspec.lock y package-lock.json) cuando existan.
+
+# Caché local de la herramienta de Supabase
+supabase/.temp/
