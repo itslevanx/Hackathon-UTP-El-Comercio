@@ -6,7 +6,7 @@ El escenario de demostración es **Pueblo Libre, Lima, Perú**, con personajes y
 
 ## Estado del proyecto
 
-Este repositorio contiene un **prototipo web navegable de 24 pantallas**, 14 capturas de referencia y documentación para continuar el desarrollo.
+El material de referencia está concentrado en **`protipo/`**: un prototipo web navegable de 24 pantallas, 14 capturas y la guía del equipo. La raíz queda reservada para desarrollar la aplicación; actualmente solo contiene este README, `.gitignore` y la carpeta del prototipo.
 
 | Elemento | Estado |
 |---|---|
@@ -32,16 +32,16 @@ El repositorio requiere acceso autorizado si permanece privado. Usa tu método h
 
 ### 2. Abrir el prototipo
 
-No requiere instalar dependencias de Node ni ejecutar una compilación. Desde Finder, abre `index.html` en tu navegador. También puedes hacerlo desde Terminal:
+No requiere instalar dependencias de Node ni ejecutar una compilación. Desde Finder, abre `protipo/index.html` en tu navegador. También puedes hacerlo desde Terminal:
 
 ```sh
-open index.html
+open protipo/index.html
 ```
 
 Para revisar el prototipo servido por HTTP, si tienes Python 3 instalado:
 
 ```sh
-python3 -m http.server 8000 --bind 127.0.0.1
+python3 -m http.server 8000 --bind 127.0.0.1 --directory protipo
 ```
 
 Abre [http://localhost:8000](http://localhost:8000). Para detener el servidor, pulsa `Control + C` en Terminal. Si el puerto está ocupado, usa otro, por ejemplo `8001`.
@@ -50,7 +50,7 @@ Mantén conexión a internet para cargar los recursos externos del diseño actua
 
 ### 3. Recorrer las pantallas
 
-- `index.html` lleva a la bienvenida.
+- `protipo/index.html` lleva a la bienvenida.
 - La barra inferior conecta Inicio, Explorar, Publicar, Favores y Perfil.
 - Los botones principales conectan detalles, formularios y confirmaciones.
 - El menú flotante **Pantallas** permite abrir directamente cualquiera de las 24 vistas, incluidos los estados de demostración.
@@ -75,17 +75,20 @@ Algunos controles conservan interacciones visuales de ejemplo. No se implementan
 
 ```text
 .
-├── index.html                  # Entrada al prototipo
-├── prototype.js                # Rutas, controles conectados y menú de pantallas
-├── README.md                   # Presentación, uso y colaboración
-├── EQUIPO.md                   # Arquitectura propuesta y plan de ejecución
-├── .gitignore                  # Exclusiones para macOS y herramientas de desarrollo
-├── calm_civic_humanist/
-│   └── DESIGN.md               # Referencia de diseño visual
-└── <número>._<nombre>/
-    ├── code.html               # Interfaz de cada pantalla
-    └── screen.png              # Referencia visual, cuando está disponible
+├── README.md                       # Presentación, uso y colaboración
+├── .gitignore                      # Exclusiones para macOS y desarrollo
+└── protipo/                        # Todo el material del prototipo
+    ├── index.html                  # Entrada al prototipo
+    ├── prototype.js                # Navegación y menú de pantallas
+    ├── EQUIPO.md                   # Arquitectura propuesta y plan de ejecución
+    ├── calm_civic_humanist/
+    │   └── DESIGN.md               # Referencia de diseño visual
+    └── <número>._<nombre>/
+        ├── code.html               # Interfaz de cada pantalla
+        └── screen.png              # Referencia visual, cuando está disponible
 ```
+
+Mantener dentro de `protipo/` los HTML, las capturas, los recursos y la documentación de referencia del prototipo. El nuevo proyecto móvil se desarrollará en la raíz cuando el equipo lo inicialice.
 
 Los nombres de las carpetas provienen de la exportación original. No todas las pantallas incluyen captura.
 
@@ -93,30 +96,30 @@ Los nombres de las carpetas provienen de la exportación original. No todas las 
 
 | N.º | Pantalla | Captura local |
 |---|---|---|
-| 1 | [Bienvenida](1._bienvenida_nexo/code.html) | No |
-| 2 | [Registro por barrio](2._registro_por_barrio/code.html) | No |
-| 3 | [Inicio](3._inicio_hola_rosa/code.html) | Sí |
-| 4 | [Explorar servicios](4._explorar_servicios/code.html) | No |
-| 5 | [Detalle de servicio](5._detalle_de_servicio_luis_alberto/code.html) | No |
-| 6 | [Recomendar servicio](6._recomendar_servicio_confirmaci_n/code.html) | No |
-| 7 | [Cadena de favores](7._cadena_de_favores_pueblo_libre/code.html) | Sí |
-| 8 | [Publicar en el barrio](8._publicaci_n_r_pida_en_el_barrio/code.html) | No |
-| 9 | [Solicitud de Carmen](9._detalle_de_solicitud_do_a_carmen/code.html) | No |
-| 10 | [Confirmar oferta](10._confirmar_oferta_pueblo_libre/code.html) | No |
-| 11 | [Red de apoyo vecinal](11._red_de_apoyo_vecinal/code.html) | Sí |
-| 12 | [Mapa de zonas y recursos](12._mapa_de_zonas_y_recursos/code.html) | Sí |
-| 13 | [Perfil de Rosa](13._perfil_vecinal_do_a_rosa/code.html) | No |
-| 14 | [Información sin conexión](14._modo_sin_conexi_n_informaci_n_guardada/code.html) | Sí |
-| 15 | [Estados del prototipo](15._tablero_de_estados_ui/code.html) | Sí |
-| 16 | [Elegir simulacro](16._selector_de_simulacro_prep_rate_con_tu_comunidad/code.html) | Sí |
-| 17 | [Sismo: primera decisión](17._sismo_decisi_n_1_durante_el_movimiento/code.html) | Sí |
-| 18 | [Sismo: aprendizajes](18._sismo_retroalimentaci_n_educativa_1/code.html) | Sí |
-| 19 | [Sismo: apoyo vecinal](19._sismo_decisi_n_2_apoyo_vecinal_seguro/code.html) | Sí |
-| 20 | [Solicitudes simuladas](20._red_de_apoyo_simulada_solicitudes_ficticias/code.html) | Sí |
-| 21 | [Oferta simulada](21._detalle_simulado_oferta_registrada_ficticia/code.html) | No |
-| 22 | [Resultado de la práctica](22._resultado_pr_ctica_completada/code.html) | Sí |
-| 23 | [Lluvias intensas](23._inundaci_n_lluvias_intensas_y_zonas_seguras/code.html) | Sí |
-| 24 | [Corte de agua y luz](24._corte_de_servicios_pr_ctica_sin_conexi_n/code.html) | Sí |
+| 1 | [Bienvenida](protipo/1._bienvenida_nexo/code.html) | No |
+| 2 | [Registro por barrio](protipo/2._registro_por_barrio/code.html) | No |
+| 3 | [Inicio](protipo/3._inicio_hola_rosa/code.html) | Sí |
+| 4 | [Explorar servicios](protipo/4._explorar_servicios/code.html) | No |
+| 5 | [Detalle de servicio](protipo/5._detalle_de_servicio_luis_alberto/code.html) | No |
+| 6 | [Recomendar servicio](protipo/6._recomendar_servicio_confirmaci_n/code.html) | No |
+| 7 | [Cadena de favores](protipo/7._cadena_de_favores_pueblo_libre/code.html) | Sí |
+| 8 | [Publicar en el barrio](protipo/8._publicaci_n_r_pida_en_el_barrio/code.html) | No |
+| 9 | [Solicitud de Carmen](protipo/9._detalle_de_solicitud_do_a_carmen/code.html) | No |
+| 10 | [Confirmar oferta](protipo/10._confirmar_oferta_pueblo_libre/code.html) | No |
+| 11 | [Red de apoyo vecinal](protipo/11._red_de_apoyo_vecinal/code.html) | Sí |
+| 12 | [Mapa de zonas y recursos](protipo/12._mapa_de_zonas_y_recursos/code.html) | Sí |
+| 13 | [Perfil de Rosa](protipo/13._perfil_vecinal_do_a_rosa/code.html) | No |
+| 14 | [Información sin conexión](protipo/14._modo_sin_conexi_n_informaci_n_guardada/code.html) | Sí |
+| 15 | [Estados del prototipo](protipo/15._tablero_de_estados_ui/code.html) | Sí |
+| 16 | [Elegir simulacro](protipo/16._selector_de_simulacro_prep_rate_con_tu_comunidad/code.html) | Sí |
+| 17 | [Sismo: primera decisión](protipo/17._sismo_decisi_n_1_durante_el_movimiento/code.html) | Sí |
+| 18 | [Sismo: aprendizajes](protipo/18._sismo_retroalimentaci_n_educativa_1/code.html) | Sí |
+| 19 | [Sismo: apoyo vecinal](protipo/19._sismo_decisi_n_2_apoyo_vecinal_seguro/code.html) | Sí |
+| 20 | [Solicitudes simuladas](protipo/20._red_de_apoyo_simulada_solicitudes_ficticias/code.html) | Sí |
+| 21 | [Oferta simulada](protipo/21._detalle_simulado_oferta_registrada_ficticia/code.html) | No |
+| 22 | [Resultado de la práctica](protipo/22._resultado_pr_ctica_completada/code.html) | Sí |
+| 23 | [Lluvias intensas](protipo/23._inundaci_n_lluvias_intensas_y_zonas_seguras/code.html) | Sí |
+| 24 | [Corte de agua y luz](protipo/24._corte_de_servicios_pr_ctica_sin_conexi_n/code.html) | Sí |
 
 ## Tecnologías del prototipo actual
 
@@ -144,7 +147,7 @@ SQLite no sincroniza automáticamente con PostgreSQL. El equipo deberá implemen
 
 Para compilar y probar iOS se necesita una Mac con Xcode. La carpeta actual todavía no contiene un proyecto móvil que pueda abrirse o compilarse con Flutter.
 
-Consulta [EQUIPO.md](EQUIPO.md) para el alcance recomendado, las entidades mínimas, las reglas de sincronización, el reparto de trabajo y los criterios de aceptación.
+Consulta [EQUIPO.md](protipo/EQUIPO.md) para el alcance recomendado, las entidades mínimas, las reglas de sincronización, el reparto de trabajo y los criterios de aceptación.
 
 ## Prioridades de la hackathon
 
@@ -158,13 +161,13 @@ Consulta [EQUIPO.md](EQUIPO.md) para el alcance recomendado, las entidades míni
 
 ## Cómo modificar la navegación web
 
-1. Edita la interfaz correspondiente en su archivo `code.html`.
-2. Revisa el objeto `routes` y el bloque `switch` en `prototype.js` para cambiar destinos o conectar controles.
+1. Edita la interfaz correspondiente en `protipo/<carpeta-de-pantalla>/code.html`.
+2. Revisa el objeto `routes` y el bloque `switch` en `protipo/prototype.js` para cambiar destinos o conectar controles.
 3. Mantén la carga de `../prototype.js` en cada pantalla.
-4. Si renombras una carpeta, actualiza también los enlaces de la barra inferior, `index.html` y este catálogo.
+4. Si renombras una carpeta, actualiza también los enlaces de la barra inferior, `protipo/index.html` y este catálogo.
 5. Comprueba el recorrido de ida, los botones de regreso y las salidas del simulacro.
 
-Los controles se conectan por identificador o texto. Cambiar el texto de un botón puede requerir actualizar su conexión en `prototype.js`.
+Los controles se conectan por identificador o texto. Cambiar el texto de un botón puede requerir actualizar su conexión en `protipo/prototype.js`.
 
 ## Verificación antes de compartir cambios
 
@@ -174,7 +177,7 @@ Los controles se conectan por identificador o texto. Cambiar el texto de un bot�
 - Revisar el menú **Pantallas** y sus 24 destinos.
 - Comprobar las confirmaciones de demostración.
 - Revisar el diseño con ancho de teléfono y texto ampliado.
-- Si tienes Node.js, comprobar la sintaxis con `node --check prototype.js`.
+- Si tienes Node.js, comprobar la sintaxis con `node --check protipo/prototype.js`.
 - Revisar `git diff --check` y `git status` antes de crear el commit.
 
 El repositorio todavía no incluye una suite automatizada de pruebas. Las pruebas offline de la futura app deben incluir cierre y reapertura, reintentos y recuperación de conexión.
@@ -209,7 +212,7 @@ Se conservan los archivos fuente, las capturas de referencia y los archivos de b
 
 ## Referencias
 
-- [Guía del equipo](EQUIPO.md)
-- [Sistema de diseño](calm_civic_humanist/DESIGN.md)
+- [Guía del equipo](protipo/EQUIPO.md)
+- [Sistema de diseño](protipo/calm_civic_humanist/DESIGN.md)
 - [Flutter: arquitectura offline](https://docs.flutter.dev/app-architecture/design-patterns/offline-first)
 - [Drift: documentación](https://drift.simonbinder.eu/)
