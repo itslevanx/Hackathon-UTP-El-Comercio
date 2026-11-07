@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="es"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><title>Selección De Simulacro — Simulación NEXO</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24..48,400..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "secondary-fixed-dim": "#86d7b0", "primary-fixed": "#c3ebdb", "secondary-container": "#9ff1c8", "outline-variant": "#c1c8c4", "primary": "#00271d", "tertiary-fixed-dim": "#98ccf8", "on-primary-fixed-variant": "#294d42", "outline": "#717975", "on-secondary-fixed": "#002114", "on-secondary": "#ffffff", "primary-fixed-dim": "#a8cfc0", "surface-dim": "#cdded4", "surface": "#edfdf3", "surface-container-low": "#e7f8ee", "error-container": "#ffdad6", "tertiary-fixed": "#cbe6ff", "on-background": "#101e19", "surface-container-high": "#dcece2", "on-primary-fixed": "#002118", "on-error": "#ffffff", "secondary-fixed": "#a1f3cb", "primary-container": "#183d32", "inverse-primary": "#a8cfc0", "on-tertiary-fixed": "#001e30", "surface-container-lowest": "#ffffff", "surface-container-highest": "#d6e6dd", "on-tertiary-fixed-variant": "#064b70", "surface-container": "#e1f2e8", "surface-variant": "#d6e6dd", "background": "#edfdf3", "tertiary-container": "#003a59", "error": "#ba1a1a", "on-error-container": "#93000a", "on-secondary-fixed-variant": "#005137", "secondary": "#106c4c", "surface-tint": "#416659", "on-secondary-container": "#187050", "on-primary": "#ffffff", "on-tertiary-container": "#71a5cf", "inverse-surface": "#25332d", "on-surface": "#101e19", "inverse-on-surface": "#e4f5eb", "on-primary-container": "#81a899", "on-tertiary": "#ffffff", "tertiary": "#002439", "surface-bright": "#edfdf3", "on-surface-variant": "#414845" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "margin": "1rem", "space-xl": "2rem", "space-md": "1rem", "space-lg": "1.5rem", "space-xs": "0.5rem", "space-sm": "0.75rem", "gutter": "1rem" }, fontFamily: { "label-lg": ["Inter"], "label-md": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "headline-sm": ["Inter"], "label-sm": ["Inter"], "headline-xl": ["Inter"], "body-xl": ["Inter"], "headline-md": ["Inter"], "headline-lg": ["Inter"] }, fontSize: { "label-lg": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "label-md": ["16px", { "lineHeight": "24px", "fontWeight": "600" }], "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }], "body-md": ["18px", { "lineHeight": "28px", "fontWeight": "500" }], "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }], "label-sm": ["16px", { "lineHeight": "22px", "fontWeight": "500" }], "headline-xl": ["32px", { "lineHeight": "40px", "fontWeight": "700" }], "body-xl": ["20px", { "lineHeight": "32px", "fontWeight": "400" }], "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }], "headline-lg": ["28px", { "lineHeight": "36px", "fontWeight": "700" }] } } } };</script><style>@layer base { html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Inter', sans-serif; background-color: #edfdf3; color: #101e19; } .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } } ::-webkit-scrollbar { display: none; }</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface antialiased flex flex-col min-h-screen selection:bg-secondary-container selection:text-on-secondary-container"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="w-full bg-tertiary-container px-margin py-space-xs flex items-center justify-center gap-space-xs text-tertiary-fixed"><span class="material-symbols-outlined text-[20px]">model_training</span><span class="font-label-md text-label-md tracking-wide uppercase text-tertiary-fixed">SIMULACIÓN · Ejercicio ficticio</span></div><div class="h-20 px-margin flex items-center justify-between max-w-[390px] mx-auto w-full"><button aria-label="Volver a la pantalla anterior" class="min-h-[48px] min-w-[48px] px-space-xs py-space-xs flex items-center gap-space-xs rounded-xl bg-surface-container hover:bg-surface-container-high active:bg-surface-dim text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-secondary" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span><span class="font-label-lg text-label-lg">Volver</span></button><div class="flex items-center gap-space-sm"><button aria-label="Salir de la práctica" class="min-h-[48px] px-space-md py-space-xs flex items-center gap-space-xs rounded-xl bg-error-container hover:bg-error-container/80 text-on-error-container transition-colors focus:outline-none focus:ring-2 focus:ring-error" type="button"><span class="material-symbols-outlined text-[22px]">close</span><span class="font-label-md text-label-md">Salir</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full max-w-[390px] mx-auto pt-28 px-margin pb-safe bg-surface"><div class="py-space-sm mb-space-sm"><h1 class="font-headline-md text-headline-md text-on-surface tracking-tight">Selección De Simulacro</h1></div><div class="flex flex-col w-full pb-12">
+<!-- Prominent Mandatory Simulation Notice -->
+<section class="mb-space-md rounded-xl bg-surface-container-high p-space-md shadow-sm">
+<div class="flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-secondary shrink-0 text-[26px]" style="font-variation-settings: 'FILL' 1;">info</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface uppercase tracking-wider">Aviso importante</span>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1 leading-snug">
+          SIMULACIÓN — Esta actividad es un ejercicio. No representa una emergencia real ni envía solicitudes de ayuda.
+        </p>
+</div>
+</div>
+</section>
+<!-- Title & Subtitle Intro -->
+<header class="mb-space-lg">
+<h2 class="font-headline-lg text-headline-lg text-on-surface leading-tight">
+      Prepárate con tu comunidad
+    </h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant mt-space-xs leading-relaxed">
+      Aprende y ensaya con calma cómo actuar de forma solidaria y segura en tu barrio ante situaciones imprevistas.
+    </p>
+</header>
+<!-- Scenario Cards Selection Form -->
+<section aria-label="Escenarios de práctica comunitaria" class="flex flex-col gap-space-md" role="radiogroup">
+<!-- Scenario 1 (Default Selected) -->
+<article aria-checked="true" class="scenario-card cursor-pointer rounded-xl bg-surface-container-lowest p-space-md shadow-sm transition-all text-on-surface" id="card-sismo" onclick="selectScenario('sismo')" role="radio" tabindex="0">
+<div class="flex items-start justify-between gap-space-sm mb-space-xs">
+<div class="flex items-center gap-space-xs">
+<span class="radio-indicator flex items-center justify-center w-7 h-7 rounded-full bg-secondary text-on-secondary shrink-0">
+<span class="material-symbols-outlined text-[18px]">check</span>
+</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Sismo en Lima</span>
+</div>
+<span class="badge-status shrink-0 inline-flex items-center px-3 py-1 rounded-full font-label-sm text-label-sm bg-secondary-container text-on-secondary-container">
+          Seleccionado
+        </span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant pl-9 mb-space-sm leading-relaxed">
+        ¿Qué hacer durante y después del movimiento? Practica cómo protegerte y coordinar apoyo barrial sin ponerte en riesgo.
+      </p>
+<div class="pl-9">
+<div class="h-28 w-full rounded-lg overflow-hidden bg-surface-container relative">
+<img class="w-full h-full object-cover" data-alt="Calm residential Lima street after an earthquake drill, neighbors gathering serenely in an open community park painted with safe zone circles, natural warm daylight, rich forest green civic aesthetic, peaceful tone" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAgT9OA-v3qkb_C6osoH0jX5Vjm2uLfhH4I_gV3jDGRjniODhKLYChyTEswNsGroyT0vk4X-j59c2iyPOzQ6GK2dm1ZZ6zAcdf5lyd63h-Mkk3WdTJHk--z8irX13C7bR3kDmKkZjuQ_RJZrkbDcXGpGuLIRLMZp-szVZRydH5z_2wAfrfI4dsIddYNG58oChOSCTfGmmOxgFsmhcqcxUvc0lUfWz7jyLDmIc2skj5A"/>
+</div>
+</div>
+</article>
+<!-- Scenario 2 -->
+<article aria-checked="false" class="scenario-card cursor-pointer rounded-xl bg-surface-container p-space-md shadow-sm transition-all text-on-surface" id="card-lluvia" onclick="selectScenario('lluvia')" role="radio" tabindex="0">
+<div class="flex items-start justify-between gap-space-sm mb-space-xs">
+<div class="flex items-center gap-space-xs">
+<span class="radio-indicator flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-high shrink-0">
+<span class="material-symbols-outlined text-[18px] text-transparent">check</span>
+</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Lluvias intensas</span>
+</div>
+<span class="badge-status shrink-0 inline-flex items-center px-3 py-1 rounded-full font-label-sm text-label-sm bg-surface-container-high text-on-surface-variant">
+          Elegir escenario
+        </span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant pl-9 mb-space-sm leading-relaxed">
+        Calles anegadas y acumulación de agua. Aprende a coordinar desde zonas seguras evitando riesgos.
+      </p>
+<div class="pl-9">
+<div class="h-28 w-full rounded-lg overflow-hidden bg-surface-container-high relative">
+<img class="w-full h-full object-cover opacity-90" data-alt="Neighbors in Lima neighborhood safely observing heavy rainfall from a secure elevated community porch with rain protection gear, collaborative neighborhood support, clean natural daylight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBXOqsWJiyj98hlQYxv5_0s0dJcKTE9mV2ysUvZfZlUpAsjreO4i3rRvIvsl5l76fY5LRYWa698K54KI_a4lafBABduNTeatlmsCawc2v4PVUPXcoY5aBsrG0WVGS0S4r9gP5Y1oY0gRSB68cCZsSYUeah4NvSMBfIObc5yoTRPvIMe8Q47iMexy1VHHepbdoCxcKgYQo7ueq2sZZD0o_rAZ38ugH5mQrDFr_pwyCKw"/>
+</div>
+</div>
+</article>
+<!-- Scenario 3 -->
+<article aria-checked="false" class="scenario-card cursor-pointer rounded-xl bg-surface-container p-space-md shadow-sm transition-all text-on-surface" id="card-servicios" onclick="selectScenario('servicios')" role="radio" tabindex="0">
+<div class="flex items-start justify-between gap-space-sm mb-space-xs">
+<div class="flex items-center gap-space-xs">
+<span class="radio-indicator flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-high shrink-0">
+<span class="material-symbols-outlined text-[18px] text-transparent">check</span>
+</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Corte de agua y luz</span>
+</div>
+<span class="badge-status shrink-0 inline-flex items-center px-3 py-1 rounded-full font-label-sm text-label-sm bg-surface-container-high text-on-surface-variant">
+          Elegir escenario
+        </span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant pl-9 mb-space-sm leading-relaxed">
+        Interrupción de servicios básicos. Ensaya cómo consultar información guardada en tu teléfono sin internet.
+      </p>
+<div class="pl-9">
+<div class="h-28 w-full rounded-lg overflow-hidden bg-surface-container-high relative">
+<img class="w-full h-full object-cover opacity-90" data-alt="Close up of an elderly Peruvian neighbor showing an offline preparedness checklist on a clean smartphone screen to family in a bright sunlit kitchen with water jugs ready, dignified communal atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD324YxpRTNmmoJ53DL1AO7C-5rAyM8d4pgaubtEtenJwJJoNA_xGOiLLLS7BpjhKm0W3z1lmIy7zly-O56T9Y0YZItfdB2hqMeCu2b8uqm4ZEWhVfhmSuDnzCl9AdzKgTDqeZJHuE7hYt8gnrvHlErR7Rx-W6YuredMWaWto1dSBuUZFfKhnroPMqNz8y66gWydGfXvTD4kYbvC53r3QS5ojVarlcVFB9is8vYjg-J"/>
+</div>
+</div>
+</article>
+</section>
+<!-- Reassurance Notice -->
+<div class="flex items-center gap-space-xs mt-space-md px-1">
+<span class="material-symbols-outlined text-outline text-[20px] shrink-0">touch_app</span>
+<p class="font-label-sm text-label-sm text-on-surface-variant">
+      Elegir otro escenario solo cambia la selección; la práctica no inicia por sí sola hasta pulsar el botón principal.
+    </p>
+</div>
+<!-- Primary Action Button (>= 56px height) -->
+<div class="mt-space-lg w-full">
+<button aria-label="Iniciar práctica seleccionada" class="w-full min-h-[56px] px-space-md py-space-sm rounded-xl bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-space-sm shadow-md hover:bg-primary-container active:bg-inverse-surface transition-colors focus:outline-none focus:ring-2 focus:ring-secondary" id="btn-iniciar" type="button">
+<span id="btn-text">Iniciar práctica: Sismo en Lima</span>
+<span class="material-symbols-outlined text-[24px]">arrow_forward</span>
+</button>
+</div>
+<!-- Educational Source Footer -->
+<footer class="mt-space-lg pt-space-md flex items-center justify-center gap-space-xs text-center">
+<span class="material-symbols-outlined text-outline text-[20px] shrink-0">menu_book</span>
+<p class="font-label-sm text-label-sm text-outline">
+      Orientación educativa inspirada en recomendaciones cívicas de INDECI. Ejercicio didáctico sin evaluación punitiva.
+    </p>
+</footer>
+</div>
+<script>
+  const scenarioData = {
+    sismo: {
+      name: "Sismo en Lima",
+      btnLabel: "Iniciar práctica: Sismo en Lima"
+    },
+    lluvia: {
+      name: "Lluvias intensas e inundación",
+      btnLabel: "Iniciar práctica: Lluvias intensas"
+    },
+    servicios: {
+      name: "Corte imprevisto de agua y luz",
+      btnLabel: "Iniciar práctica: Corte de agua y luz"
+    }
+  };
+
+  function selectScenario(key) {
+    const keys = ['sismo', 'lluvia', 'servicios'];
+    keys.forEach(k => {
+      const card = document.getElementById('card-' + k);
+      const radio = card.querySelector('.radio-indicator');
+      const icon = radio.querySelector('.material-symbols-outlined');
+      const badge = card.querySelector('.badge-status');
+
+      if (k === key) {
+        card.setAttribute('aria-checked', 'true');
+        card.classList.remove('bg-surface-container');
+        card.classList.add('bg-surface-container-lowest');
+
+        radio.classList.remove('bg-surface-container-high');
+        radio.classList.add('bg-secondary', 'text-on-secondary');
+        icon.classList.remove('text-transparent');
+        icon.classList.add('text-on-secondary');
+
+        badge.classList.remove('bg-surface-container-high', 'text-on-surface-variant');
+        badge.classList.add('bg-secondary-container', 'text-on-secondary-container');
+        badge.textContent = 'Seleccionado';
+      } else {
+        card.setAttribute('aria-checked', 'false');
+        card.classList.remove('bg-surface-container-lowest');
+        card.classList.add('bg-surface-container');
+
+        radio.classList.remove('bg-secondary', 'text-on-secondary');
+        radio.classList.add('bg-surface-container-high');
+        icon.classList.remove('text-on-secondary');
+        icon.classList.add('text-transparent');
+
+        badge.classList.remove('bg-secondary-container', 'text-on-secondary-container');
+        badge.classList.add('bg-surface-container-high', 'text-on-surface-variant');
+        badge.textContent = 'Elegir escenario';
+      }
+    });
+
+    const btnText = document.getElementById('btn-text');
+    if (btnText && scenarioData[key]) {
+      btnText.textContent = scenarioData[key].btnLabel;
+    }
+  }
+
+  // Keyboard navigation support for accessibility
+  document.querySelectorAll('.scenario-card').forEach(card => {
+    card.addEventListener('keydown', (e) => {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        card.click();
+      }
+    });
+  });
+</script></main><script src="../prototype.js"></script>
+</body></html>

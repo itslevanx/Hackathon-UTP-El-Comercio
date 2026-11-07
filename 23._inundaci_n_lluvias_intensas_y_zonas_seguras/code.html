@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="es"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><title>Alerta Simulada En Curso — Simulación NEXO</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24..48,400..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "secondary-fixed-dim": "#86d7b0", "primary-fixed": "#c3ebdb", "secondary-container": "#9ff1c8", "outline-variant": "#c1c8c4", "primary": "#00271d", "tertiary-fixed-dim": "#98ccf8", "on-primary-fixed-variant": "#294d42", "outline": "#717975", "on-secondary-fixed": "#002114", "on-secondary": "#ffffff", "primary-fixed-dim": "#a8cfc0", "surface-dim": "#cdded4", "surface": "#edfdf3", "surface-container-low": "#e7f8ee", "error-container": "#ffdad6", "tertiary-fixed": "#cbe6ff", "on-background": "#101e19", "surface-container-high": "#dcece2", "on-primary-fixed": "#002118", "on-error": "#ffffff", "secondary-fixed": "#a1f3cb", "primary-container": "#183d32", "inverse-primary": "#a8cfc0", "on-tertiary-fixed": "#001e30", "surface-container-lowest": "#ffffff", "surface-container-highest": "#d6e6dd", "on-tertiary-fixed-variant": "#064b70", "surface-container": "#e1f2e8", "surface-variant": "#d6e6dd", "background": "#edfdf3", "tertiary-container": "#003a59", "error": "#ba1a1a", "on-error-container": "#93000a", "on-secondary-fixed-variant": "#005137", "secondary": "#106c4c", "surface-tint": "#416659", "on-secondary-container": "#187050", "on-primary": "#ffffff", "on-tertiary-container": "#71a5cf", "inverse-surface": "#25332d", "on-surface": "#101e19", "inverse-on-surface": "#e4f5eb", "on-primary-container": "#81a899", "on-tertiary": "#ffffff", "tertiary": "#002439", "surface-bright": "#edfdf3", "on-surface-variant": "#414845" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "margin": "1rem", "space-xl": "2rem", "space-md": "1rem", "space-lg": "1.5rem", "space-xs": "0.5rem", "space-sm": "0.75rem", "gutter": "1rem" }, fontFamily: { "label-lg": ["Inter"], "label-md": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "headline-sm": ["Inter"], "label-sm": ["Inter"], "headline-xl": ["Inter"], "body-xl": ["Inter"], "headline-md": ["Inter"], "headline-lg": ["Inter"] }, fontSize: { "label-lg": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "label-md": ["16px", { "lineHeight": "24px", "fontWeight": "600" }], "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }], "body-md": ["18px", { "lineHeight": "28px", "fontWeight": "500" }], "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }], "label-sm": ["16px", { "lineHeight": "22px", "fontWeight": "500" }], "headline-xl": ["32px", { "lineHeight": "40px", "fontWeight": "700" }], "body-xl": ["20px", { "lineHeight": "32px", "fontWeight": "400" }], "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }], "headline-lg": ["28px", { "lineHeight": "36px", "fontWeight": "700" }] } } } };</script><style>@layer base { html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Inter', sans-serif; background-color: #edfdf3; color: #101e19; } .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } } ::-webkit-scrollbar { display: none; }</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface antialiased flex flex-col min-h-screen selection:bg-secondary-container selection:text-on-secondary-container"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="w-full bg-tertiary-container px-margin py-space-xs flex items-center justify-center gap-space-xs text-tertiary-fixed"><span class="material-symbols-outlined text-[20px]">model_training</span><span class="font-label-md text-label-md tracking-wide uppercase text-tertiary-fixed">SIMULACIÓN · Ejercicio ficticio</span></div><div class="h-20 px-margin flex items-center justify-between max-w-[390px] mx-auto w-full"><button aria-label="Volver a la pantalla anterior" class="min-h-[48px] min-w-[48px] px-space-xs py-space-xs flex items-center gap-space-xs rounded-xl bg-surface-container hover:bg-surface-container-high active:bg-surface-dim text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-secondary" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span><span class="font-label-lg text-label-lg">Volver</span></button><div class="flex items-center gap-space-sm"><button aria-label="Salir de la práctica" class="min-h-[48px] px-space-md py-space-xs flex items-center gap-space-xs rounded-xl bg-error-container hover:bg-error-container/80 text-on-error-container transition-colors focus:outline-none focus:ring-2 focus:ring-error" type="button"><span class="material-symbols-outlined text-[22px]">close</span><span class="font-label-md text-label-md">Salir</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full max-w-[390px] mx-auto pt-28 px-margin pb-safe bg-surface"><div class="py-space-sm mb-space-sm"><h1 class="font-headline-md text-headline-md text-on-surface tracking-tight">Alerta Simulada En Curso</h1></div><div class="flex flex-col w-full pb-12 space-y-5">
+<div class="w-full rounded-xl bg-tertiary-container px-space-md py-space-sm flex items-start gap-space-sm text-tertiary-fixed shadow-sm">
+<span class="material-symbols-outlined text-[24px] text-tertiary-fixed shrink-0 mt-0.5" style="font-variation-settings: 'FILL' 1;">water_drop</span>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-tertiary-fixed-dim">Módulo de Respuesta Cívica</span>
+<p class="font-headline-sm text-headline-sm text-tertiary-fixed leading-tight">Escenario de Práctica: Lluvias Intensas y Acumulación de Agua</p>
+</div>
+</div>
+<div class="w-full rounded-xl bg-surface-container-lowest p-space-md shadow-sm space-y-space-xs">
+<div class="flex items-center gap-space-xs text-secondary mb-1">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">report</span>
+<span class="font-label-md text-label-md uppercase tracking-wide">Situación Observada</span>
+</div>
+<p class="font-body-lg text-body-lg text-on-surface">
+      Lluvias persistentes han generado acumulación de agua y anegamiento en avenidas y desniveles del barrio. El agua alcanza el nivel de las veredas y no se aprecia el fondo de las calzadas.
+    </p>
+</div>
+<div class="w-full pt-1">
+<h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">
+      ¿Cómo actúas de forma segura?
+    </h2>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-1">
+      Selecciona la respuesta que mejor preserve la integridad física:
+    </p>
+</div>
+<div class="w-full flex flex-col space-y-space-sm" id="decision-group">
+<button class="w-full min-h-[56px] text-left p-space-md rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all flex items-start gap-space-sm shadow-sm group focus:outline-none" id="btn-option-a" onclick="selectOption('A')" type="button">
+<div class="w-7 h-7 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-primary-fixed-dim transition-colors" id="check-a">
+<span class="font-label-md text-label-md text-primary">A</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="font-body-md text-body-md text-on-surface">
+          Permanezco en un punto alto y seguro, sigo las alertas oficiales y evito caminar por calles anegadas.
+        </p>
+<span class="inline-flex items-center gap-1 font-label-sm text-label-sm text-secondary font-semibold mt-1">
+<span class="material-symbols-outlined text-[18px]">verified</span> Recomendada por Defensa Civil
+        </span>
+</div>
+</button>
+<button class="w-full min-h-[56px] text-left p-space-md rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all flex items-start gap-space-sm shadow-sm group focus:outline-none" id="btn-option-b" onclick="selectOption('B')" type="button">
+<div class="w-7 h-7 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-surface-dim transition-colors" id="check-b">
+<span class="font-label-md text-label-md text-primary">B</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="font-body-md text-body-md text-on-surface">
+          Intento cruzar a pie la corriente de agua para revisar el estado de un local a dos cuadras.
+        </p>
+</div>
+</button>
+<button class="w-full min-h-[56px] text-left p-space-md rounded-xl bg-surface-container-lowest hover:bg-surface-container transition-all flex items-start gap-space-sm shadow-sm group focus:outline-none" id="btn-option-c" onclick="selectOption('C')" type="button">
+<div class="w-7 h-7 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-surface-dim transition-colors" id="check-c">
+<span class="font-label-md text-label-md text-primary">C</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="font-body-md text-body-md text-on-surface">
+          Ingreso en una zona inundada para rescatar objetos o enseres materiales arrastrados por el agua.
+        </p>
+</div>
+</button>
+</div>
+<div class="w-full rounded-xl bg-surface-container-low p-space-md shadow-sm space-y-space-sm" id="feedback-panel">
+<div class="flex items-center gap-space-xs text-primary">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">shield</span>
+<h3 class="font-headline-sm text-headline-sm text-primary">
+        Evitar corrientes de agua y rescates arriesgados
+      </h3>
+</div>
+<p class="font-body-lg text-body-lg text-on-surface">
+      El agua estancada o en movimiento oculta buzones abiertos, cables eléctricos caídos y desniveles peligrosos. Las recomendaciones oficiales de INDECI señalan que nunca se debe intentar cruzar calles anegadas ni a pie ni en vehículo particular. Las labores de rescate corresponden a personal capacitado de bomberos y defensa civil.
+    </p>
+<div class="rounded-lg bg-surface-container-highest p-space-sm mt-space-xs">
+<p class="font-label-sm text-label-sm text-on-surface-variant">
+<strong>Fuente:</strong> INDECI (gob.pe/institucion/indeci/noticias/1369382-indeci-brinda-recomendaciones-ante-temporada-de-lluvias-intensas). Orientación cívica general formativa.
+      </p>
+</div>
+</div>
+<div class="w-full rounded-xl bg-surface-container-lowest p-space-md shadow-sm space-y-space-md">
+<div class="flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center shrink-0 text-on-secondary-container">
+<span class="material-symbols-outlined text-[24px]">volunteer_activism</span>
+</div>
+<div class="flex-1 min-w-0">
+<span class="font-label-sm text-label-sm uppercase tracking-wide text-secondary">Acción Comunitaria Simulada</span>
+<h4 class="font-headline-sm text-headline-sm text-on-surface mt-0.5">Apoyo desde zona segura</h4>
+<p class="font-body-lg text-body-lg text-on-surface-variant mt-1">
+          Ofrecer apoyo desde zona segura: Donación ficticia de sacos de arena y plásticos protectores desde el frontis seguro de un predio no anegado.
+        </p>
+</div>
+</div>
+<div class="hidden rounded-lg bg-secondary-container p-space-sm text-on-secondary-container" id="solidarity-confirmation">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-md text-label-md">Simulación registrada: Sacos de protección asignados al punto comunal.</span>
+</div>
+</div>
+<button class="w-full min-h-[56px] px-space-md py-space-sm rounded-xl bg-secondary hover:bg-on-secondary-container text-on-secondary font-label-lg text-label-lg transition-colors flex items-center justify-center gap-space-xs shadow-sm focus:outline-none" id="btn-solidarity" onclick="handleSolidarityAction()" type="button">
+<span>Registrar ofrecimiento solidario simulado</span>
+<span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<script>
+  function selectOption(choice) {
+    const opts = ['a', 'b', 'c'];
+    opts.forEach(opt => {
+      const btn = document.getElementById('btn-option-' + opt);
+      const icon = document.getElementById('check-' + opt);
+      btn.classList.remove('bg-secondary-container', 'text-on-secondary-container');
+      btn.classList.add('bg-surface-container-lowest');
+      icon.classList.remove('bg-secondary', 'text-on-secondary');
+      icon.classList.add('bg-surface-container-high', 'text-primary');
+    });
+
+    const activeBtn = document.getElementById('btn-option-' + choice.toLowerCase());
+    const activeIcon = document.getElementById('check-' + choice.toLowerCase());
+
+    if (activeBtn && activeIcon) {
+      activeBtn.classList.remove('bg-surface-container-lowest');
+      activeBtn.classList.add('bg-surface-container-high');
+      activeIcon.classList.remove('bg-surface-container-high', 'text-primary');
+      activeIcon.classList.add('bg-primary', 'text-on-primary');
+    }
+  }
+
+  function handleSolidarityAction() {
+    const confirmation = document.getElementById('solidarity-confirmation');
+    const button = document.getElementById('btn-solidarity');
+    confirmation.classList.remove('hidden');
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-not-allowed');
+    button.innerHTML = '<span class="material-symbols-outlined text-[20px]">done_all</span><span>Ofrecimiento guardado en el simulador</span>';
+  }
+</script></main><script src="../prototype.js"></script>
+</body></html>
