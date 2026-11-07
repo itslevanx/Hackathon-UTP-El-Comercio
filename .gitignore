@@ -16,6 +16,7 @@ Temporary Items/
 
 # Configuración personal de editores y agentes
 .idea/
+*.iml
 .vscode/
 *.swp
 *.swo
