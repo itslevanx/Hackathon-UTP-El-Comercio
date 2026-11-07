@@ -50,16 +50,36 @@
     case 1: byId('btn-comenzar',2); byId('btn-login',3); break;
     case 2: byId('continue-button',3); break;
     case 3:
+      byId('quick-emergency', () => location.assign(url(8) + '?intent=emergency'));
+      byId('quick-help', () => location.assign(url(8) + '?intent=help'));
+      byId('quick-publish',8); byId('quick-services',4); byId('quick-favors',7);
+      byId('quick-practice',16); byId('quick-network',11);
       text('Pueblo Libre (Sector',2); text('Buscar',4); text('Explorar oficios',4);
       text('Participar en la cadena',7); text('Ver red comunitaria',11);
       text('Ver servicio / Contactar',5); text('Ver perfil',5);
       text('Responder a Carmen',9); text('Publicar pedido',8); break;
     case 4: text('Ver perfil y opiniones',5); break;
-    case 5: byId('btn-recomendar',6); break;
+    case 5: break; // Las acciones finales están en la propia ficha.
     case 6: text('Entendido, volver al inicio',3); break;
     case 7: text('Pedir o brindar un favor',8); text('Responder',9); text('Ver detalle del favor',9); break;
     case 8: text('Cambiar',2); text('Ver mi publicación en Favores',7); break;
-    case 9: byId('btn-ofrecer',10); break;
+    case 9:
+      const offer = document.getElementById('btn-ofrecer');
+      if (offer) {
+        const note = document.createElement('label');
+        note.textContent = 'Nota para coordinar (opcional)';
+        const field = document.createElement('textarea'); field.rows = 3; field.id = 'offer-note';
+        note.append(field); offer.before(note);
+        offer.querySelector('span:last-child').textContent = 'Enviar oferta de ayuda';
+        connect(offer, () => {
+          window.mostrarConfirmacion();
+          const result = document.getElementById('mensaje-exito');
+          result.setAttribute('role','status'); result.tabIndex = -1;
+          result.querySelector('p:last-child').textContent = 'Oferta simulada registrada. No se envió a ninguna persona.';
+          result.focus();
+        });
+      }
+      break;
     case 10:
       // La pantalla de conversación no forma parte de este prototipo.
       document.querySelectorAll('button').forEach(el => {
@@ -69,7 +89,7 @@
         }
       }); break;
     case 11:
-      text('Necesito ayuda barrial',8); text('Puedo ofrecer ayuda hoy',8);
+      text('Necesito ayuda barrial', () => location.assign(url(8) + '?intent=emergency')); text('Puedo ofrecer ayuda hoy', () => location.assign(url(8) + '?intent=offer'));
       text('Ver recursos y directorios',12); text('Iniciar ejercicio guiado',16);
       text('Ver detalles',9); text('Ofrecer mano',10); break;
     case 12: text('Ver solicitudes en este sector',7); text('Ver detalles y voluntariados',11); break;
@@ -84,7 +104,7 @@
     case 16:
       byId('btn-iniciar', () => {
         const selected = document.querySelector('.scenario-card[aria-checked="true"]');
-        go(selected?.id === 'card-lluvia' ? 23 : selected?.id === 'card-servicios' ? 24 : 17);
+        location.assign(new URL('practice.html?scenario=' + (selected?.id === 'card-lluvia' ? 'lluvia' : selected?.id === 'card-servicios' ? 'servicios' : 'sismo'), base).href);
       }); break;
     case 17: byId('submit-btn',18); break;
     case 18: text('Continuar a la siguiente',19); text('Repetir esta pregunta',17); break;
@@ -99,6 +119,90 @@
       addLink(document.getElementById('solidarity-confirmation'), 'Elegir otro escenario',16); break;
     case 24: text('Finalizar ejercicio y volver al selector',16); break;
   }
+  // Formularios y acciones según el acceso elegido desde Inicio.
+  if (current === 8) {
+    const intent = new URLSearchParams(location.search).get('intent');
+    const emergency = intent === 'emergency';
+    if (intent) {
+      const type = document.querySelector(`input[value="${intent === 'offer' ? 'ofrecer_favor' : 'pedir_ayuda'}"]`);
+      if (type) { type.checked = true; window.actualizarTipo(type); }
+      if (emergency) {
+        const urgency = document.querySelector('input[value="urgencia"]');
+        urgency.checked = true; window.actualizarTiempo(urgency);
+        document.querySelector('h1').textContent = 'Reportar una emergencia';
+        document.getElementById('btnPublicar').textContent = 'Enviar reporte';
+      }
+    }
+    document.getElementById('tituloInput').value = '';
+    document.getElementById('detalleInput').value = '';
+    document.querySelectorAll('main p').forEach(p => {
+      if (p.textContent.includes('Tu publicación aparecerá')) p.textContent = 'Prototipo: este formulario no realiza envíos reales.';
+    });
+    const heading = document.getElementById('exitoTitulo');
+    heading.textContent = 'Demostración completada';
+    heading.nextElementSibling.textContent = 'No se envió ninguna publicación real.';
+    // El plazo se escribe: evita añadir una selección obligatoria al flujo.
+    const timing = document.querySelector('[aria-label="Plazo de tiempo"]');
+    const timingInput = document.createElement('input'); timingInput.type = 'text';
+    timingInput.id = 'timing-note'; timingInput.placeholder = 'Ej.: hoy por la tarde';
+    timingInput.setAttribute('aria-label','¿Para cuándo lo necesitas?');
+    if (emergency) { timingInput.value = 'Emergencia · atención prioritaria'; timingInput.readOnly = true; }
+    timing.replaceWith(timingInput);
+    if (intent) {
+      const typeGroup = document.querySelector('[aria-label="Tipo de publicación"]');
+      typeGroup.closest('fieldset').style.display = 'none';
+    }
+    document.querySelectorAll('#modalExito span').forEach(el => {
+      if (el.textContent.includes('Solicitud vecinal activa')) el.textContent = 'Solicitud ficticia';
+    });
+    const modal = document.getElementById('modalExito');
+    const original = window.simularPublicacion;
+    let previousFocus;
+    window.simularPublicacion = () => {
+      previousFocus = document.activeElement; original(); heading.tabIndex = -1; heading.focus();
+    };
+    const close = window.cerrarModal;
+    window.cerrarModal = () => { close(); previousFocus?.focus(); };
+    modal.addEventListener('keydown', e => {
+      if (e.key === 'Escape') window.cerrarModal();
+      if (e.key === 'Tab') {
+        const buttons = [...modal.querySelectorAll('button')];
+        if (e.shiftKey && (document.activeElement === buttons[0] || document.activeElement === heading)) { e.preventDefault(); buttons.at(-1).focus(); }
+        else if (!e.shiftKey && document.activeElement === buttons.at(-1)) { e.preventDefault(); buttons[0].focus(); }
+      }
+    });
+  }
+  if (current === 5) {
+    const contact = document.getElementById('btn-contactar');
+    const recommend = document.getElementById('btn-recomendar');
+    const status = document.createElement('p'); status.setAttribute('role','status');
+    recommend?.after(status);
+    if (contact) {
+      const label = document.createElement('label'); label.textContent = '¿Qué necesitas coordinar? (opcional)';
+      const message = document.createElement('textarea'); message.rows = 3;
+      label.append(message); contact.before(label);
+      contact.textContent = 'Enviar solicitud de contacto';
+      connect(contact, () => { status.textContent = 'Solicitud de contacto simulada registrada. No se envió un mensaje real.'; });
+    }
+    if (recommend) {
+      recommend.textContent = 'He usado este servicio y lo recomiendo';
+      connect(recommend, () => { status.textContent = 'Recomendación simulada registrada.'; recommend.disabled = true; });
+    }
+  }
+  const accessibilityStyle = document.createElement('style');
+  document.head.append(accessibilityStyle);
+  let largeText = false;
+  try { largeText = localStorage.getItem('prototype-large-text') === 'true'; } catch {}
+  const applyTextSize = () => {
+    accessibilityStyle.textContent = largeText ? '[class*="text-body"],[class*="text-label"],button,input,textarea,select{font-size:22px!important;line-height:1.5!important} [class*="text-headline"]{font-size:30px!important;line-height:1.3!important}' : '';
+    document.querySelectorAll('[aria-label="Ajustar tamaño de texto"]').forEach(el => el.setAttribute('aria-pressed',String(largeText)));
+  };
+  document.querySelectorAll('[aria-label="Ajustar tamaño de texto"]').forEach(el => connect(el, () => {
+    largeText = !largeText;
+    try { localStorage.setItem('prototype-large-text',String(largeText)); } catch {}
+    applyTextSize();
+  }));
+  applyTextSize();
   function addLink(parent, label, target) {
     if (!parent) return;
     const link = document.createElement('a');

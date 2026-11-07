@@ -1,0 +1,23 @@
+/* Ajustes compartidos de accesibilidad. */
+:root { color-scheme: light; }
+body { overflow-wrap: anywhere; }
+button, input, textarea, select, a { touch-action: manipulation; }
+button, input, select { min-height: 48px; }
+button, textarea, select { font: inherit; }
+button, a { white-space: normal; }
+button { height: auto !important; padding-top: 12px; padding-bottom: 12px; }
+textarea { display:block; width:100%; padding:12px; border:1px solid #717975; border-radius:12px; }
+.truncate { white-space:normal !important; overflow:visible !important; text-overflow:clip !important; }
+:focus-visible { outline:3px solid #003a59 !important; outline-offset:3px; }
+.quick-actions { display:grid; gap:12px; }
+.quick-actions button, .home-more button { width:100%; padding:14px 16px; min-height:56px; background:#106c4c; color:white; border-radius:12px; text-align:left; font-size:18px; font-weight:600; }
+.quick-actions .urgent { background:#b42318; }
+.quick-actions .practice { background:#003a59; }
+.home-more { margin-top:20px; padding:12px; background:white; border-radius:12px; }
+.home-more summary { min-height:48px; padding:12px 0; cursor:pointer; }
+.home-more p { margin-top:12px; }
+@media(max-width:380px) {
+ header [class*="h-20"] { height:auto; min-height:80px; flex-wrap:wrap; }
+ main { padding-top:110px !important; }
+}
+@media(prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto !important; animation:none !important; transition:none !important; } }
