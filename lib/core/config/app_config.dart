@@ -157,6 +157,9 @@ class AppConfig {
     return (value * 1000.0).roundToDouble() / 1000.0;
   }
 
+  static double? roundOptionalPublicCoordinate(double? value) =>
+      value == null ? null : roundPublicCoordinate(value);
+
   /// Calcula la distancia aproximada en línea recta (en metros) y la redondea
   /// a múltiplos de 50 metros (mínimo 50 m) para evitar triangulación domiciliaria.
   static int approximateDistanceMeters({

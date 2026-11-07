@@ -30,9 +30,10 @@ abstract class RemoteBackendGateway {
     required String alias,
     required String neighborhood,
     required String sector,
-    required double approxLat,
-    required double approxLng,
+    required double? approxLat,
+    required double? approxLng,
     required bool useGpsApprox,
+    String? districtUbigeo,
   });
 
   Future<UserProfile> signInAccount({
@@ -45,9 +46,10 @@ abstract class RemoteBackendGateway {
   Future<RemoteSyncResult> pushOutboxOperation(OutboxOperation operation);
 
   Future<List<Publication>> fetchPublicationsWithinRadius({
-    required double originLat,
-    required double originLng,
+    required double? originLat,
+    required double? originLng,
     required int radiusMeters,
+    String? districtUbigeo,
     PublicationKind? kind,
     String? category,
     String? searchText,
@@ -123,6 +125,7 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     ),
   };
 
+  bool lastProfileFetchWasOffline = false;
   UserProfile? _activeLocalSession;
   final Set<String> _processedIdempotencyKeys = <String>{};
   final StreamController<ChatMessage> _realtimeController =
@@ -151,6 +154,7 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
 
   @override
   Future<UserProfile?> getCurrentSessionProfile() async {
+    lastProfileFetchWasOffline = false;
     if (isLiveSupabaseConnected) {
       try {
         final session = _client.auth.currentSession;
@@ -172,8 +176,9 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
                 (user.userMetadata?['sector'] as String?) ??
                 AppConfig.defaultSector,
             email: user.email ?? '',
-            approxLat: AppConfig.defaultLat,
-            approxLng: AppConfig.defaultLng,
+            districtUbigeo: user.userMetadata?['district_ubigeo'] as String?,
+            approxLat: (user.userMetadata?['approx_lat'] as num?)?.toDouble(),
+            approxLng: (user.userMetadata?['approx_lng'] as num?)?.toDouble(),
             useGpsApprox: false,
             shareResourcesConsent: false,
             updatedAt: DateTime.now().toUtc(),
@@ -188,10 +193,9 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
           sector: (data['sector'] as String?) ?? AppConfig.defaultSector,
           email: user.email ?? '',
           bio: (data['bio'] as String?) ?? '',
-          approxLat:
-              (data['approx_lat'] as num?)?.toDouble() ?? AppConfig.defaultLat,
-          approxLng:
-              (data['approx_lng'] as num?)?.toDouble() ?? AppConfig.defaultLng,
+          districtUbigeo: data['district_ubigeo'] as String?,
+          approxLat: (data['approx_lat'] as num?)?.toDouble(),
+          approxLng: (data['approx_lng'] as num?)?.toDouble(),
           useGpsApprox: (data['use_gps_approx'] as bool?) ?? false,
           shareResourcesConsent:
               (data['share_resources_consent'] as bool?) ?? false,
@@ -200,22 +204,22 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
               DateTime.now().toUtc(),
         );
       } catch (_) {
+        lastProfileFetchWasOffline = true;
         final user = _client.auth.currentUser;
         if (user == null) return null;
         if (_activeLocalSession?.id == user.id) return _activeLocalSession;
         final metadata = user.userMetadata ?? {};
-        final zone = AppConfig.resolveZone(
-          metadata['neighborhood'] as String? ?? AppConfig.defaultNeighborhood,
-          metadata['sector'] as String? ?? AppConfig.defaultSector,
-        );
         return UserProfile(
           id: user.id,
           alias: metadata['alias'] as String? ?? 'Vecino',
-          neighborhood: zone.neighborhood,
-          sector: zone.sector,
+          neighborhood:
+              metadata['neighborhood'] as String? ??
+              AppConfig.defaultNeighborhood,
+          sector: metadata['sector'] as String? ?? AppConfig.defaultSector,
           email: user.email ?? '',
-          approxLat: zone.publicLat,
-          approxLng: zone.publicLng,
+          districtUbigeo: metadata['district_ubigeo'] as String?,
+          approxLat: (metadata['approx_lat'] as num?)?.toDouble(),
+          approxLng: (metadata['approx_lng'] as num?)?.toDouble(),
           updatedAt: DateTime.now().toUtc(),
         );
       }
@@ -230,9 +234,10 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     required String password,
     required String neighborhood,
     required String sector,
-    required double approxLat,
-    required double approxLng,
+    required double? approxLat,
+    required double? approxLng,
     required bool useGpsApprox,
+    String? districtUbigeo,
   }) async {
     if (!isTestDouble && (!isLiveSupabaseConnected || simulateNetworkOffline)) {
       _requireRealBackend();
@@ -258,6 +263,10 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
           'alias': cleanAlias,
           'neighborhood': neighborhood,
           'sector': sector,
+          'district_ubigeo': districtUbigeo,
+          'approx_lat': AppConfig.roundOptionalPublicCoordinate(approxLat),
+          'approx_lng': AppConfig.roundOptionalPublicCoordinate(approxLng),
+          'use_gps_approx': useGpsApprox,
         },
       );
       if (response.session == null) {
@@ -266,14 +275,15 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
         );
       }
       final userId = response.user!.id;
-      final roundedLat = AppConfig.roundPublicCoordinate(approxLat);
-      final roundedLng = AppConfig.roundPublicCoordinate(approxLng);
+      final roundedLat = AppConfig.roundOptionalPublicCoordinate(approxLat);
+      final roundedLng = AppConfig.roundOptionalPublicCoordinate(approxLng);
 
       await _client.from('profiles').upsert({
         'id': userId,
         'alias': cleanAlias,
         'neighborhood': neighborhood,
         'sector': sector,
+        'district_ubigeo': districtUbigeo,
         'use_gps_approx': useGpsApprox,
         'approx_lat': roundedLat,
         'approx_lng': roundedLng,
@@ -285,6 +295,7 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
         alias: cleanAlias,
         neighborhood: neighborhood,
         sector: sector,
+        districtUbigeo: districtUbigeo,
         email: cleanEmail,
         approxLat: roundedLat,
         approxLng: roundedLng,
@@ -303,9 +314,10 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
       alias: cleanAlias,
       neighborhood: neighborhood,
       sector: sector,
+      districtUbigeo: districtUbigeo,
       email: cleanEmail,
-      approxLat: AppConfig.roundPublicCoordinate(approxLat),
-      approxLng: AppConfig.roundPublicCoordinate(approxLng),
+      approxLat: AppConfig.roundOptionalPublicCoordinate(approxLat),
+      approxLng: AppConfig.roundOptionalPublicCoordinate(approxLng),
       useGpsApprox: useGpsApprox,
       shareResourcesConsent: false,
       updatedAt: DateTime.now().toUtc(),
@@ -439,13 +451,11 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
         final payload = operation.decodePayload();
         switch (operation.entityType) {
           case 'publication':
-            final lat = AppConfig.roundPublicCoordinate(
-              (payload['approx_lat'] as num?)?.toDouble() ??
-                  AppConfig.defaultLat,
+            final lat = AppConfig.roundOptionalPublicCoordinate(
+              (payload['approx_lat'] as num?)?.toDouble(),
             );
-            final lng = AppConfig.roundPublicCoordinate(
-              (payload['approx_lng'] as num?)?.toDouble() ??
-                  AppConfig.defaultLng,
+            final lng = AppConfig.roundOptionalPublicCoordinate(
+              (payload['approx_lng'] as num?)?.toDouble(),
             );
             await _client
                 .from('publications')
@@ -460,6 +470,8 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
                     'description': payload['description'],
                     'neighborhood': payload['neighborhood'],
                     'sector': payload['sector'],
+                    if (payload.containsKey('district_ubigeo'))
+                      'district_ubigeo': payload['district_ubigeo'],
                     'availability_text': payload['availability_text'] ?? '',
                     'priority': payload['priority'],
                     'status': payload['status'],
@@ -534,19 +546,19 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
             }, onConflict: 'client_mutation_id');
             break;
           case 'profile':
-            final lat = AppConfig.roundPublicCoordinate(
-              (payload['approx_lat'] as num?)?.toDouble() ??
-                  AppConfig.defaultLat,
+            final lat = AppConfig.roundOptionalPublicCoordinate(
+              (payload['approx_lat'] as num?)?.toDouble(),
             );
-            final lng = AppConfig.roundPublicCoordinate(
-              (payload['approx_lng'] as num?)?.toDouble() ??
-                  AppConfig.defaultLng,
+            final lng = AppConfig.roundOptionalPublicCoordinate(
+              (payload['approx_lng'] as num?)?.toDouble(),
             );
             await _client.from('profiles').upsert({
               'id': payload['id'],
               'alias': payload['alias'],
               'neighborhood': payload['neighborhood'],
               'sector': payload['sector'],
+              if (payload.containsKey('district_ubigeo'))
+                'district_ubigeo': payload['district_ubigeo'],
               'bio': payload['bio'] ?? '',
               'use_gps_approx': ((payload['use_gps_approx'] as int?) ?? 0) == 1,
               'share_resources_consent':
@@ -578,9 +590,10 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
 
   @override
   Future<List<Publication>> fetchPublicationsWithinRadius({
-    required double originLat,
-    required double originLng,
+    required double? originLat,
+    required double? originLng,
     required int radiusMeters,
+    String? districtUbigeo,
     PublicationKind? kind,
     String? category,
     String? searchText,
@@ -590,55 +603,24 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     }
 
     final rows = await _client.rpc(
-      'search_publications_within_radius',
+      'search_publications_by_location',
       params: {
         'p_lat': originLat,
         'p_lng': originLng,
         'p_radius_meters': radiusMeters,
+        'p_district_ubigeo': districtUbigeo,
         'p_kind': kind?.dbValue,
         'p_category': category,
         'p_search': searchText,
       },
     ) as List<dynamic>;
-
     return rows.map((raw) {
-      final map = raw as Map<String, dynamic>;
-      return Publication(
-        id: map['id'] as String,
-        clientMutationId: map['client_mutation_id'] as String,
-        ownerUserId: map['author_id'] as String,
-        authorId: map['author_id'] as String,
-        authorAlias: (map['author_alias'] as String?) ?? 'Vecino',
-        kind: PublicationKind.fromDb(map['kind'] as String),
-        category: (map['category'] as String?) ?? 'general',
-        title: map['title'] as String,
-        description: map['description'] as String,
-        neighborhood:
-            (map['neighborhood'] as String?) ?? AppConfig.defaultNeighborhood,
-        sector: (map['sector'] as String?) ?? AppConfig.defaultSector,
-        availabilityText: (map['availability_text'] as String?) ?? '',
-        priority: PublicationPriority.fromDb(
-          (map['priority'] as String?) ?? 'normal',
-        ),
-        status: PublicationStatus.fromDb(
-          (map['status'] as String?) ?? 'abierta',
-        ),
-        approxLat:
-            (map['public_lat'] as num?)?.toDouble() ?? AppConfig.defaultLat,
-        approxLng:
-            (map['public_lng'] as num?)?.toDouble() ?? AppConfig.defaultLng,
-        recommendationCount:
-            (map['recommendation_count'] as num?)?.toInt() ?? 0,
-        syncStatus: SyncStatus.confirmado,
-        version: (map['version'] as num?)?.toInt() ?? 1,
-        isDemo: (map['is_demo'] as bool?) ?? false,
-        createdAt:
-            DateTime.tryParse((map['created_at'] as String?) ?? '') ??
-            DateTime.now().toUtc(),
-        updatedAt:
-            DateTime.tryParse((map['updated_at'] as String?) ?? '') ??
-            DateTime.now().toUtc(),
-      );
+      final row = raw as Map<String, dynamic>;
+      final map = Map<String, Object?>.from(row['publication'] as Map);
+      map['owner_user_id'] = map['author_id'];
+      map['author_alias'] = row['author_alias'] ?? 'Vecino';
+      map['sync_status'] = 'confirmado';
+      return Publication.fromSqlMap(map);
     }).toList();
   }
 

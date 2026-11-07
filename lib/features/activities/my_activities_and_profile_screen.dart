@@ -96,7 +96,7 @@ class _MyActivitiesAndProfileScreenState
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Zona aproximada: ${c.activeNeighborhood} · ${c.activeSector}',
+                  'Zona aproximada: ${c.activeAdministrativeLocationLabel} · ${c.activeSector}',
                   style: const TextStyle(
                     fontSize: 16,
                     color: AppTheme.textSecondary,

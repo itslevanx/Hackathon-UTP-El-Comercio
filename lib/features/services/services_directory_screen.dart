@@ -239,8 +239,8 @@ class _ServiceCard extends StatelessWidget {
   });
 
   final Publication service;
-  final double originLat;
-  final double originLng;
+  final double? originLat;
+  final double? originLng;
   final VoidCallback onTap;
 
   @override

@@ -4,6 +4,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/geography/peru_location_catalog.dart';
+import '../shared/peru_location_selector.dart';
 import '../../core/state/app_controller.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -31,8 +33,10 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  String _selectedDistrict = AppConfig.defaultNeighborhood;
-  String _selectedSector = AppConfig.defaultSector;
+  final _locationKey = GlobalKey<FormFieldState<PeruLocationSelection>>();
+  final _sectorController = TextEditingController();
+  PeruLocationSelection _location = const PeruLocationSelection.empty();
+  bool _locationChanged = false;
   bool _useOptionalGps = false;
   double? _gpsLat;
   double? _gpsLng;
@@ -42,25 +46,63 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedDistrict = widget.controller.activeNeighborhood;
-    _selectedSector = widget.controller.activeSector;
+    _location = widget.controller.locationCatalog.selectionForDistrict(
+      widget.controller.activeDistrictUbigeo,
+    );
+    _sectorController.text = widget.controller.activeSector;
+    _gpsLat = widget.controller.currentUser?.useGpsApprox == true
+        ? widget.controller.activeLat
+        : null;
+    _gpsLng = widget.controller.currentUser?.useGpsApprox == true
+        ? widget.controller.activeLng
+        : null;
     _useOptionalGps = widget.controller.currentUser?.useGpsApprox ?? false;
   }
 
   @override
   void dispose() {
+    _sectorController.dispose();
     _aliasController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  NeighborhoodZone get _currentZoneConfig {
-    final zones =
-        AppConfig.zonesByDistrict[_selectedDistrict] ??
-        AppConfig.zonesByDistrict[AppConfig.defaultNeighborhood]!;
-    final matched = zones.where((z) => z.sector == _selectedSector).toList();
-    return matched.isNotEmpty ? matched.first : zones.first;
+  ({String name, String sector, String? code, double? lat, double? lng})
+  _formLocation() {
+    final c = widget.controller;
+    final district = c.locationCatalog.district(_location.districtCode);
+    if (district == null) {
+      if (!_locationChanged && c.currentUser != null) {
+        return (
+          name: c.activeNeighborhood,
+          sector: _sectorController.text.trim().isEmpty
+              ? c.activeSector
+              : _sectorController.text.trim(),
+          code: c.activeDistrictUbigeo,
+          lat: c.activeLat,
+          lng: c.activeLng,
+        );
+      }
+      throw StateError('Selecciona departamento, provincia y distrito.');
+    }
+    return (
+      name: district.name,
+      sector: _sectorController.text.trim().isEmpty
+          ? 'Zona general del distrito'
+          : _sectorController.text.trim(),
+      code: district.code,
+      lat: _useOptionalGps
+          ? _gpsLat
+          : !_locationChanged
+          ? c.activeLat
+          : district.capitalLat,
+      lng: _useOptionalGps
+          ? _gpsLng
+          : !_locationChanged
+          ? c.activeLng
+          : district.capitalLng,
+    );
   }
 
   Future<void> _toggleGps(bool enabled) async {
@@ -118,21 +160,19 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
     FocusScope.of(context).unfocus();
     setState(() => _errorMessage = null);
     try {
-      final zone = _currentZoneConfig;
       if (_isRegisterMode) {
+        if (!(_locationKey.currentState?.validate() ?? false)) return;
+        final zone = _formLocation();
         await widget.controller.registerAndSignIn(
           alias: _aliasController.text,
           email: _emailController.text,
           password: _passwordController.text,
-          neighborhood: zone.district,
+          neighborhood: zone.name,
           sector: zone.sector,
-          approxLat: _useOptionalGps
-              ? (_gpsLat ?? zone.centerLat)
-              : zone.centerLat,
-          approxLng: _useOptionalGps
-              ? (_gpsLng ?? zone.centerLng)
-              : zone.centerLng,
+          approxLat: zone.lat,
+          approxLng: zone.lng,
           useGpsApprox: _useOptionalGps,
+          districtUbigeo: zone.code,
         );
       } else {
         await widget.controller.signIn(
@@ -150,20 +190,30 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
   }
 
   Future<void> _handleSaveLocationOnly() async {
-    final zone = _currentZoneConfig;
-    await widget.controller.updateLocationPreference(
-      neighborhood: zone.district,
-      sector: zone.sector,
-      approxLat: _useOptionalGps ? (_gpsLat ?? zone.centerLat) : zone.centerLat,
-      approxLng: _useOptionalGps ? (_gpsLng ?? zone.centerLng) : zone.centerLng,
-      useGpsApprox: _useOptionalGps,
-    );
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Zona actualizada a ${zone.district} · ${zone.sector}'),
-        ),
+    FocusScope.of(context).unfocus();
+    if (!(_locationKey.currentState?.validate() ?? false)) return;
+    try {
+      final zone = _formLocation();
+      await widget.controller.updateLocationPreference(
+        neighborhood: zone.name,
+        sector: zone.sector,
+        districtUbigeo: zone.code,
+        approxLat: zone.lat,
+        approxLng: zone.lng,
+        useGpsApprox: _useOptionalGps,
       );
+      if (!mounted) return;
+      setState(() => _locationChanged = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Zona guardada: ${zone.name} · ${zone.sector}')),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () =>
+              _errorMessage = error.toString().replaceFirst('Bad state: ', ''),
+        );
+      }
     }
   }
 
@@ -172,10 +222,6 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
     final c = widget.controller;
     final user = c.currentUser;
     final pendingIntent = c.pendingAuthIntent;
-    final districts = AppConfig.zonesByDistrict.keys.toList();
-    final sectorsForDistrict =
-        AppConfig.zonesByDistrict[_selectedDistrict] ??
-        AppConfig.zonesByDistrict[AppConfig.defaultNeighborhood]!;
 
     return SingleChildScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -226,7 +272,7 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Correo: ${user.email} · Zona: ${user.neighborhood} (${user.sector})',
+                    'Correo: ${user.email} · Zona: ${c.activeAdministrativeLocationLabel} (${user.sector})',
                     style: const TextStyle(
                       fontSize: 16,
                       color: AppTheme.textSecondary,
@@ -298,54 +344,55 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  isDense: false,
-                  itemHeight: null,
-                  key: const Key('dropdown_district'),
-                  initialValue: _selectedDistrict,
-                  decoration: const InputDecoration(
-                    labelText: 'Distrito / Barrio',
+                if (c.currentUser != null &&
+                    c.locationCatalog.district(c.activeDistrictUbigeo) == null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Ubicación anterior: ${c.activeNeighborhood} · ${c.activeSector}. Se conserva hasta que elijas un distrito; no se asigna un UBIGEO por el nombre.',
+                    ),
                   ),
-                  items: [
-                    for (final d in districts)
-                      DropdownMenuItem(value: d, child: Text(d)),
-                  ],
-                  onChanged: (val) {
-                    if (val == null) return;
-                    final firstSector =
-                        AppConfig.zonesByDistrict[val]!.first.sector;
-                    setState(() {
-                      _selectedDistrict = val;
-                      _selectedSector = firstSector;
-                    });
-                  },
+                PeruLocationSelector(
+                  key: _locationKey,
+                  catalog: c.locationCatalog,
+                  value: _location,
+                  isRequired:
+                      _isRegisterMode || user == null || _locationChanged,
+                  onChanged: (next) => setState(() {
+                    if (next.districtCode != _location.districtCode) {
+                      _sectorController.clear();
+                      _useOptionalGps = false;
+                      _gpsLat = null;
+                      _gpsLng = null;
+                    }
+                    _locationChanged = true;
+                    _location = next;
+                  }),
                 ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  isDense: false,
-                  itemHeight: null,
-                  key: const Key('dropdown_sector'),
-                  initialValue:
-                      sectorsForDistrict.any((z) => z.sector == _selectedSector)
-                      ? _selectedSector
-                      : sectorsForDistrict.first.sector,
+                TextField(
+                  key: const Key('input_location_reference'),
+                  contextMenuBuilder: buildTextSelectionToolbar,
+                  onTapOutside: dismissTextInput,
+                  controller: _sectorController,
+                  maxLength: 100,
                   decoration: const InputDecoration(
-                    labelText: 'Sector / Cuadrante aproximado',
+                    labelText: 'Barrio, sector o referencia (opcional)',
+                    helperText: 'Conserva una referencia aproximada, sin dirección exacta.',
+                    helperMaxLines: 3,
                   ),
-                  items: [
-                    for (final z in sectorsForDistrict)
-                      DropdownMenuItem(
-                        value: z.sector,
-                        child: Text('${z.sector} (${z.referenceLandmark})'),
-                      ),
-                  ],
-                  onChanged: (val) {
-                    if (val == null) return;
-                    setState(() => _selectedSector = val);
-                  },
                 ),
+                if (_location.districtCode != null && !_useOptionalGps)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      c.locationCatalog
+                                  .district(_location.districtCode)
+                                  ?.capitalLat ==
+                              null
+                          ? 'El distrito no tiene coordenadas de capital disponibles. Puedes continuar sin GPS: se mostrará por distrito, sin distancia ni marcador.'
+                          : 'Sin GPS, una zona nueva usa la capital distrital publicada por el INEI como referencia aproximada.',
+                    ),
+                  ),
                 const SizedBox(height: 10),
                 Material(
                   type: MaterialType.transparency,

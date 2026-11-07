@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../config/app_config.dart';
+import '../geography/peru_location_catalog.dart';
 import '../models/entity_id.dart';
 import '../database/local_sqlite_database.dart';
 import '../models/domain_models.dart';
@@ -62,6 +63,18 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   final SupabaseRemoteGateway remoteGateway;
   final OutboxSyncService outboxSyncService;
 
+  late final PeruLocationCatalog locationCatalog;
+  String? _selectedManualUbigeo;
+  String? get activeDistrictUbigeo => _currentUser != null
+      ? _currentUser!.districtUbigeo
+      : _selectedManualUbigeo;
+
+  String get activeAdministrativeLocationLabel {
+    final district = locationCatalog.district(activeDistrictUbigeo);
+    if (district == null) return activeNeighborhood;
+    return '${district.name}, ${locationCatalog.entry(district.provinceCode)!.name}, ${locationCatalog.entry(district.departmentCode)!.name}';
+  }
+
   bool _initialized = false;
   bool get initialized => _initialized;
 
@@ -72,13 +85,15 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   String get activeNeighborhood =>
       _currentUser?.neighborhood ?? _selectedManualNeighborhood;
   String get activeSector => _currentUser?.sector ?? _selectedManualSector;
-  double get activeLat => _currentUser?.approxLat ?? _selectedManualLat;
-  double get activeLng => _currentUser?.approxLng ?? _selectedManualLng;
+  double? get activeLat =>
+      _currentUser != null ? _currentUser!.approxLat : _selectedManualLat;
+  double? get activeLng =>
+      _currentUser != null ? _currentUser!.approxLng : _selectedManualLng;
 
   String _selectedManualNeighborhood = AppConfig.defaultNeighborhood;
   String _selectedManualSector = AppConfig.defaultSector;
-  double _selectedManualLat = AppConfig.defaultLat;
-  double _selectedManualLng = AppConfig.defaultLng;
+  double? _selectedManualLat = AppConfig.defaultLat;
+  double? _selectedManualLng = AppConfig.defaultLng;
 
   AppSection _currentSection = AppSection.inicio;
   AppSection get currentSection => _currentSection;
@@ -159,12 +174,21 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Inicializa SQLite, semilla comunitaria de Pueblo Libre y sesión activa.
   Future<void> initialize({bool startWithActiveSession = true}) async {
+    locationCatalog = await PeruLocationCatalog.load();
     await database.initAndSeedDemoData(seedDemo: remoteGateway.isTestDouble);
+    final manual = await database.readManualLocation();
+    if (manual != null) {
+      _selectedManualUbigeo = manual['district_ubigeo'] as String?;
+      _selectedManualNeighborhood = manual['neighborhood'] as String;
+      _selectedManualSector = manual['sector'] as String;
+      _selectedManualLat = (manual['approx_lat'] as num?)?.toDouble();
+      _selectedManualLng = (manual['approx_lng'] as num?)?.toDouble();
+    }
 
     if (startWithActiveSession) {
       final sessionProfile = await remoteGateway.getCurrentSessionProfile();
       if (sessionProfile != null) {
-        _currentUser = sessionProfile;
+        _currentUser = await _preferPendingLocalProfile(sessionProfile);
       } else if (remoteGateway.isTestDouble) {
         // Sesión vecinal por defecto para permitir verificación inmediata del
         // presupuesto de <= 3 clics desde Inicio (puede cerrarse o cambiarse).
@@ -221,6 +245,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       final publications = await remoteGateway.fetchPublicationsWithinRadius(
         originLat: activeLat,
         originLng: activeLng,
+        districtUbigeo: activeDistrictUbigeo,
         radiusMeters: 20000,
       );
       final snapshot = await remoteGateway.fetchCommunitySnapshot();
@@ -238,16 +263,31 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  Future<UserProfile> _preferPendingLocalProfile(UserProfile remote) async {
+    final local = await database.getUserProfile(remote.id);
+    if (local == null) return remote;
+    final pending = await database.listOutboxForUser(remote.id);
+    return remoteGateway.lastProfileFetchWasOffline ||
+            pending.any(
+              (op) =>
+                  op.entityType == 'profile' &&
+                  op.syncStatus != SyncStatus.confirmado,
+            )
+        ? local
+        : remote;
+  }
+
   Future<void> _restoreSessionFromLink() async {
     if (_disposed || _restoringAuthSession || _authActionInProgress) return;
     _restoringAuthSession = true;
     final epoch = _authEpoch;
     try {
-      final profile = await remoteGateway.getCurrentSessionProfile();
+      final remoteProfile = await remoteGateway.getCurrentSessionProfile();
+      if (remoteProfile == null) return;
+      final profile = await _preferPendingLocalProfile(remoteProfile);
       if (_disposed ||
           epoch != _authEpoch ||
           _authActionInProgress ||
-          profile == null ||
           _currentUser?.id == profile.id) {
         return;
       }
@@ -292,7 +332,16 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// Recarga todas las listas desde SQLite respetando el aislamiento por usuario.
   Future<void> refreshAllLocalData() async {
     final activeId = _currentUser?.id ?? 'anonymous';
-    _publications = await database.listPublications(activeUserId: activeId);
+    final allPublications = await database.listPublications(
+      activeUserId: activeId,
+    );
+    _publications = allPublications.where((publication) {
+      if (publication.authorId == _currentUser?.id) return true;
+      final distance = publication.distanceFrom(lat: activeLat, lng: activeLng);
+      return (distance != null && distance <= 20000) ||
+          (activeDistrictUbigeo != null &&
+              publication.districtUbigeo == activeDistrictUbigeo);
+    }).toList();
     _communityResources = await database.listCommunityResources(
       neighborhood: activeNeighborhood,
     );
@@ -458,6 +507,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       description: description.trim(),
       neighborhood: user.neighborhood,
       sector: user.sector,
+      districtUbigeo: user.districtUbigeo,
       availabilityText: availabilityText.trim().isEmpty
           ? 'Horario flexible previa coordinación'
           : availabilityText.trim(),
@@ -838,7 +888,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       }
       if (_serviceRadiusMeters != null && _serviceRadiusMeters! > 0) {
         final dist = p.distanceFrom(lat: activeLat, lng: activeLng);
-        if (dist > _serviceRadiusMeters!) return false;
+        if (dist != null && dist > _serviceRadiusMeters!) return false;
+        if (dist == null &&
+            (activeDistrictUbigeo == null ||
+                p.districtUbigeo != activeDistrictUbigeo)) {
+          return false;
+        }
       }
       return true;
     }).toList();
@@ -927,10 +982,17 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     required String password,
     required String neighborhood,
     required String sector,
-    required double approxLat,
-    required double approxLng,
+    required double? approxLat,
+    required double? approxLng,
     required bool useGpsApprox,
+    String? districtUbigeo,
   }) async {
+    if (districtUbigeo != null &&
+        locationCatalog.district(districtUbigeo) == null) {
+      throw StateError(
+        'Selecciona un distrito reconocido en el catálogo INEI.',
+      );
+    }
     _authActionInProgress = true;
     _authEpoch++;
     try {
@@ -943,6 +1005,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         approxLat: approxLat,
         approxLng: approxLng,
         useGpsApprox: useGpsApprox,
+        districtUbigeo: districtUbigeo,
       );
       _currentUser = profile;
       await database.saveUserProfile(profile, queueSync: true);
@@ -960,10 +1023,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _authActionInProgress = true;
     _authEpoch++;
     try {
-      final profile = await remoteGateway.signInAccount(
+      final remoteProfile = await remoteGateway.signInAccount(
         email: email,
         password: password,
       );
+      final profile = await _preferPendingLocalProfile(remoteProfile);
       _currentUser = profile;
       await database.saveUserProfile(profile, queueSync: false);
       await refreshAllLocalData();
@@ -995,19 +1059,37 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> updateLocationPreference({
     required String neighborhood,
     required String sector,
-    required double approxLat,
-    required double approxLng,
+    required double? approxLat,
+    required double? approxLng,
     required bool useGpsApprox,
+    String? districtUbigeo,
   }) async {
+    if (districtUbigeo != null &&
+        locationCatalog.district(districtUbigeo) == null) {
+      throw StateError(
+        'Selecciona un distrito reconocido en el catálogo INEI.',
+      );
+    }
+    _selectedManualUbigeo = districtUbigeo;
     _selectedManualNeighborhood = neighborhood;
     _selectedManualSector = sector;
-    _selectedManualLat = AppConfig.roundPublicCoordinate(approxLat);
-    _selectedManualLng = AppConfig.roundPublicCoordinate(approxLng);
+    _selectedManualLat = AppConfig.roundOptionalPublicCoordinate(approxLat);
+    _selectedManualLng = AppConfig.roundOptionalPublicCoordinate(approxLng);
 
+    await database.saveManualLocation({
+      'district_ubigeo': districtUbigeo,
+      'neighborhood': neighborhood,
+      'sector': sector,
+      'approx_lat': _selectedManualLat,
+      'approx_lng': _selectedManualLng,
+      'use_gps_approx': useGpsApprox ? 1 : 0,
+    });
     if (_currentUser != null) {
       final updated = _currentUser!.copyWith(
         neighborhood: neighborhood,
         sector: sector,
+        districtUbigeo: districtUbigeo,
+        clearCoordinates: approxLat == null || approxLng == null,
         approxLat: _selectedManualLat,
         approxLng: _selectedManualLng,
         useGpsApprox: useGpsApprox,

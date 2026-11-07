@@ -156,6 +156,7 @@ class UserProfile {
     required this.alias,
     required this.neighborhood,
     required this.sector,
+    this.districtUbigeo,
     this.email = '',
     this.bio = '',
     this.approxLat = -12.076,
@@ -170,10 +171,11 @@ class UserProfile {
   final String alias;
   final String neighborhood;
   final String sector;
+  final String? districtUbigeo;
   final String email;
   final String bio;
-  final double approxLat;
-  final double approxLng;
+  final double? approxLat;
+  final double? approxLng;
   final bool useGpsApprox;
   final bool shareResourcesConsent;
   final bool isDemo;
@@ -183,6 +185,8 @@ class UserProfile {
     String? alias,
     String? neighborhood,
     String? sector,
+    String? districtUbigeo,
+    bool clearCoordinates = false,
     String? email,
     String? bio,
     double? approxLat,
@@ -197,13 +201,18 @@ class UserProfile {
       alias: alias ?? this.alias,
       neighborhood: neighborhood ?? this.neighborhood,
       sector: sector ?? this.sector,
+      districtUbigeo: districtUbigeo ?? this.districtUbigeo,
       email: email ?? this.email,
       bio: bio ?? this.bio,
-      approxLat: approxLat != null
-          ? AppConfig.roundPublicCoordinate(approxLat)
+      approxLat: clearCoordinates
+          ? null
+          : approxLat != null
+          ? AppConfig.roundOptionalPublicCoordinate(approxLat)
           : this.approxLat,
-      approxLng: approxLng != null
-          ? AppConfig.roundPublicCoordinate(approxLng)
+      approxLng: clearCoordinates
+          ? null
+          : approxLng != null
+          ? AppConfig.roundOptionalPublicCoordinate(approxLng)
           : this.approxLng,
       useGpsApprox: useGpsApprox ?? this.useGpsApprox,
       shareResourcesConsent:
@@ -218,10 +227,11 @@ class UserProfile {
     'alias': alias,
     'neighborhood': neighborhood,
     'sector': sector,
+    'district_ubigeo': districtUbigeo,
     'email': email,
     'bio': bio,
-    'approx_lat': AppConfig.roundPublicCoordinate(approxLat),
-    'approx_lng': AppConfig.roundPublicCoordinate(approxLng),
+    'approx_lat': AppConfig.roundOptionalPublicCoordinate(approxLat),
+    'approx_lng': AppConfig.roundOptionalPublicCoordinate(approxLng),
     'use_gps_approx': useGpsApprox ? 1 : 0,
     'share_resources_consent': shareResourcesConsent ? 1 : 0,
     'is_demo': isDemo ? 1 : 0,
@@ -235,10 +245,11 @@ class UserProfile {
       neighborhood:
           (map['neighborhood'] as String?) ?? AppConfig.defaultNeighborhood,
       sector: (map['sector'] as String?) ?? AppConfig.defaultSector,
+      districtUbigeo: map['district_ubigeo'] as String?,
       email: (map['email'] as String?) ?? '',
       bio: (map['bio'] as String?) ?? '',
-      approxLat: ((map['approx_lat'] as num?)?.toDouble()) ?? -12.076,
-      approxLng: ((map['approx_lng'] as num?)?.toDouble()) ?? -77.063,
+      approxLat: (map['approx_lat'] as num?)?.toDouble(),
+      approxLng: (map['approx_lng'] as num?)?.toDouble(),
       useGpsApprox:
           (map['use_gps_approx'] == 1 || map['use_gps_approx'] == true),
       shareResourcesConsent:
@@ -266,6 +277,7 @@ class Publication {
     required this.description,
     required this.neighborhood,
     required this.sector,
+    this.districtUbigeo,
     this.availabilityText = '',
     this.priority = PublicationPriority.normal,
     this.status = PublicationStatus.abierta,
@@ -292,11 +304,12 @@ class Publication {
   final String description;
   final String neighborhood;
   final String sector;
+  final String? districtUbigeo;
   final String availabilityText;
   final PublicationPriority priority;
   final PublicationStatus status;
-  final double approxLat;
-  final double approxLng;
+  final double? approxLat;
+  final double? approxLng;
   final bool shareResourceConsent;
   final int recommendationCount;
   final SyncStatus syncStatus;
@@ -306,15 +319,22 @@ class Publication {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  String distanceLabelFrom({required double lat, required double lng}) =>
-      AppConfig.formatApproximateDistance(distanceFrom(lat: lat, lng: lng));
+  String distanceLabelFrom({required double? lat, required double? lng}) {
+    final distance = distanceFrom(lat: lat, lng: lng);
+    return distance == null
+        ? 'Sin distancia geográfica disponible'
+        : AppConfig.formatApproximateDistance(distance);
+  }
 
-  int distanceFrom({required double lat, required double lng}) {
+  int? distanceFrom({required double? lat, required double? lng}) {
+    if (lat == null || lng == null || approxLat == null || approxLng == null) {
+      return null;
+    }
     return AppConfig.approximateDistanceMeters(
       fromLat: lat,
       fromLng: lng,
-      toLat: approxLat,
-      toLng: approxLng,
+      toLat: approxLat!,
+      toLng: approxLng!,
     );
   }
 
@@ -343,6 +363,7 @@ class Publication {
       description: description ?? this.description,
       neighborhood: neighborhood,
       sector: sector,
+      districtUbigeo: districtUbigeo,
       availabilityText: availabilityText ?? this.availabilityText,
       priority: priority ?? this.priority,
       status: status ?? this.status,
@@ -371,11 +392,12 @@ class Publication {
     'description': description,
     'neighborhood': neighborhood,
     'sector': sector,
+    'district_ubigeo': districtUbigeo,
     'availability_text': availabilityText,
     'priority': priority.dbValue,
     'status': status.dbValue,
-    'approx_lat': AppConfig.roundPublicCoordinate(approxLat),
-    'approx_lng': AppConfig.roundPublicCoordinate(approxLng),
+    'approx_lat': AppConfig.roundOptionalPublicCoordinate(approxLat),
+    'approx_lng': AppConfig.roundOptionalPublicCoordinate(approxLng),
     'share_resource_consent': shareResourceConsent ? 1 : 0,
     'recommendation_count': recommendationCount,
     'sync_status': syncStatus.dbValue,
@@ -402,17 +424,14 @@ class Publication {
       neighborhood:
           (map['neighborhood'] as String?) ?? AppConfig.defaultNeighborhood,
       sector: (map['sector'] as String?) ?? AppConfig.defaultSector,
+      districtUbigeo: map['district_ubigeo'] as String?,
       availabilityText: (map['availability_text'] as String?) ?? '',
       priority: PublicationPriority.fromDb(
         (map['priority'] as String?) ?? 'normal',
       ),
       status: PublicationStatus.fromDb((map['status'] as String?) ?? 'abierta'),
-      approxLat:
-          ((map['approx_lat'] ?? map['public_lat']) as num?)?.toDouble() ??
-          -12.076,
-      approxLng:
-          ((map['approx_lng'] ?? map['public_lng']) as num?)?.toDouble() ??
-          -77.063,
+      approxLat: ((map['approx_lat'] ?? map['public_lat']) as num?)?.toDouble(),
+      approxLng: ((map['approx_lng'] ?? map['public_lng']) as num?)?.toDouble(),
       shareResourceConsent:
           (map['share_resource_consent'] == 1 ||
           map['share_resource_consent'] == true),

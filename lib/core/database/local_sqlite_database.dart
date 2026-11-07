@@ -55,10 +55,11 @@ class SqfliteStoreEngine implements LocalStoreEngine {
       alias TEXT NOT NULL,
       neighborhood TEXT NOT NULL,
       sector TEXT NOT NULL,
+      district_ubigeo TEXT,
       email TEXT NOT NULL DEFAULT '',
       bio TEXT NOT NULL DEFAULT '',
-      approx_lat REAL NOT NULL DEFAULT -12.076,
-      approx_lng REAL NOT NULL DEFAULT -77.063,
+      approx_lat REAL,
+      approx_lng REAL,
       use_gps_approx INTEGER NOT NULL DEFAULT 0,
       share_resources_consent INTEGER NOT NULL DEFAULT 0,
       is_demo INTEGER NOT NULL DEFAULT 0,
@@ -78,11 +79,12 @@ class SqfliteStoreEngine implements LocalStoreEngine {
       description TEXT NOT NULL,
       neighborhood TEXT NOT NULL,
       sector TEXT NOT NULL,
+      district_ubigeo TEXT,
       availability_text TEXT NOT NULL DEFAULT '',
       priority TEXT NOT NULL DEFAULT 'normal',
       status TEXT NOT NULL DEFAULT 'abierta',
-      approx_lat REAL NOT NULL DEFAULT -12.076,
-      approx_lng REAL NOT NULL DEFAULT -77.063,
+      approx_lat REAL,
+      approx_lng REAL,
       share_resource_consent INTEGER NOT NULL DEFAULT 0,
       recommendation_count INTEGER NOT NULL DEFAULT 0,
       sync_status TEXT NOT NULL DEFAULT 'confirmado',
@@ -231,7 +233,39 @@ class SqfliteStoreEngine implements LocalStoreEngine {
       updated_at TEXT NOT NULL
     )
     ''',
+    '''
+    CREATE TABLE IF NOT EXISTS manual_location_local (
+      id TEXT PRIMARY KEY,
+      district_ubigeo TEXT,
+      neighborhood TEXT NOT NULL,
+      sector TEXT NOT NULL,
+      approx_lat REAL,
+      approx_lng REAL,
+      use_gps_approx INTEGER NOT NULL DEFAULT 0
+    )
+    ''',
   ];
+
+  static Future<void> upgradeLocationTables(Database db) async {
+    for (final table in ['profiles_local', 'publications_local']) {
+      final columns = (await db.rawQuery('PRAGMA table_info($table)'))
+          .map((row) => row['name'] as String)
+          .toList();
+      await db.execute('ALTER TABLE $table RENAME TO ${table}_v1');
+      final create = schemaStatements.firstWhere(
+        (sql) => sql.contains('CREATE TABLE IF NOT EXISTS $table ('),
+      );
+      await db.execute(create);
+      final fields = columns.map((name) => '"$name"').join(',');
+      await db.execute(
+        'INSERT INTO $table ($fields) SELECT $fields FROM ${table}_v1',
+      );
+      await db.execute('DROP TABLE ${table}_v1');
+    }
+    for (final sql in schemaStatements) {
+      await db.execute(sql);
+    }
+  }
 
   @override
   Future<void> init() async {
@@ -240,7 +274,10 @@ class SqfliteStoreEngine implements LocalStoreEngine {
     final fullPath = p.join(databasesPath, databaseFileName);
     _db = await openDatabase(
       fullPath,
-      version: 1,
+      version: 2,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) await upgradeLocationTables(db);
+      },
       onCreate: (db, version) async {
         for (final sql in schemaStatements) {
           await db.execute(sql);
@@ -336,6 +373,7 @@ class InMemoryTransactionalStoreEngine implements LocalStoreEngine {
   Future<void> init() async {
     if (_initialized) return;
     for (final name in const [
+      'manual_location_local',
       'profiles_local',
       'publications_local',
       'recommendations_local',
@@ -830,6 +868,24 @@ class LocalSqliteDatabase {
   }
 
   /// Guarda perfil local del usuario autenticado.
+  Future<Map<String, Object?>?> readManualLocation() async {
+    final rows = await _engine.query(
+      'manual_location_local',
+      where: 'id = ?',
+      whereArgs: ['selected'],
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<void> saveManualLocation(Map<String, Object?> value) async {
+    await _engine.runInTransaction(
+      (txn) => txn.upsert('manual_location_local', 'id', {
+        'id': 'selected',
+        ...value,
+      }),
+    );
+  }
+
   Future<void> saveUserProfile(
     UserProfile profile, {
     required bool queueSync,
@@ -904,11 +960,16 @@ class LocalSqliteDatabase {
         description: publication.description.trim(),
         neighborhood: publication.neighborhood,
         sector: publication.sector,
+        districtUbigeo: publication.districtUbigeo,
         availabilityText: publication.availabilityText.trim(),
         priority: publication.priority,
         status: publication.status,
-        approxLat: AppConfig.roundPublicCoordinate(publication.approxLat),
-        approxLng: AppConfig.roundPublicCoordinate(publication.approxLng),
+        approxLat: AppConfig.roundOptionalPublicCoordinate(
+          publication.approxLat,
+        ),
+        approxLng: AppConfig.roundOptionalPublicCoordinate(
+          publication.approxLng,
+        ),
         shareResourceConsent: publication.shareResourceConsent,
         recommendationCount: publication.recommendationCount,
         syncStatus: SyncStatus.pendiente,
@@ -1060,7 +1121,7 @@ class LocalSqliteDatabase {
           maxRadiusMeters != null &&
           maxRadiusMeters > 0) {
         final dist = pub.distanceFrom(lat: originLat, lng: originLng);
-        if (dist > maxRadiusMeters) continue;
+        if (dist == null || dist > maxRadiusMeters) continue;
       }
       result.add(pub);
     }

@@ -363,8 +363,8 @@ class AccessibleQuadrantMapWidget extends StatelessWidget {
     this.online = false,
   });
   final List<Publication> publications;
-  final double originLat;
-  final double originLng;
+  final double? originLat;
+  final double? originLng;
   final ValueChanged<Publication> onSelectPublication;
   final bool online;
   @override
@@ -383,8 +383,8 @@ class AccessibleQuadrantMapWidget extends StatelessWidget {
           height: 300,
           child: FlutterMap(
             options: MapOptions(
-              initialCenter: LatLng(originLat, originLng),
-              initialZoom: 14,
+              initialCenter: LatLng(originLat ?? -9.19, originLng ?? -75.015),
+              initialZoom: originLat != null && originLng != null ? 14 : 5,
             ),
             children: [
               TileLayer(
@@ -394,20 +394,21 @@ class AccessibleQuadrantMapWidget extends StatelessWidget {
               MarkerLayer(
                 markers: [
                   for (final p in publications)
-                    Marker(
-                      point: LatLng(p.approxLat, p.approxLng),
-                      width: 48,
-                      height: 48,
-                      child: IconButton(
-                        tooltip: p.title,
-                        onPressed: () => onSelectPublication(p),
-                        icon: const Icon(
-                          Icons.location_on,
-                          color: AppTheme.urgentRed,
-                          size: 36,
+                    if (p.approxLat != null && p.approxLng != null)
+                      Marker(
+                        point: LatLng(p.approxLat!, p.approxLng!),
+                        width: 48,
+                        height: 48,
+                        child: IconButton(
+                          tooltip: p.title,
+                          onPressed: () => onSelectPublication(p),
+                          icon: const Icon(
+                            Icons.location_on,
+                            color: AppTheme.urgentRed,
+                            size: 36,
+                          ),
                         ),
                       ),
-                    ),
                 ],
               ),
               RichAttributionWidget(

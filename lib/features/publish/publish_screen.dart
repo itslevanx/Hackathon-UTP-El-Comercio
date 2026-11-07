@@ -199,8 +199,8 @@ class _PublishScreenState extends State<PublishScreen> {
                 const SizedBox(height: 6),
                 Text(
                   _selectedKind.isEmergency
-                      ? 'Tipo y prioridad de emergencia predefinidos para enviarlo en 1 toque después de escribir. Ubicación aproximada: ${c.activeNeighborhood} · ${c.activeSector} (nunca mostramos tu dirección exacta).'
-                      : 'Ubicación aproximada de publicación: ${c.activeNeighborhood} · ${c.activeSector}. Los favores comunitarios son 100% gratuitos.',
+                      ? 'Tipo y prioridad de emergencia predefinidos para enviarlo en 1 toque después de escribir. Ubicación aproximada: ${c.activeAdministrativeLocationLabel} · ${c.activeSector} (nunca mostramos tu dirección exacta).'
+                      : 'Ubicación aproximada de publicación: ${c.activeAdministrativeLocationLabel} · ${c.activeSector}. Los favores comunitarios son 100% gratuitos.',
                   style: const TextStyle(
                     fontSize: 16,
                     color: AppTheme.textSecondary,

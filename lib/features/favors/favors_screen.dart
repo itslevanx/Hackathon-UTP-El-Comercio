@@ -138,8 +138,8 @@ class _FavorCard extends StatelessWidget {
   });
 
   final Publication favor;
-  final double originLat;
-  final double originLng;
+  final double? originLat;
+  final double? originLng;
   final VoidCallback onTap;
 
   @override
