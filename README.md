@@ -102,9 +102,3 @@ supabase/          Migraciones, datos de ejemplo y pruebas SQL
 test/              Pruebas de lógica, persistencia e interfaz
 protipo/           Prototipo web y referencias visuales
 ```
-
-## Equipo
-
-- [itslevanx](https://github.com/itslevanx)
-- [zaleo030802](https://github.com/zaleo030802)
-- [JhoanAronith](https://github.com/JhoanAronith)
