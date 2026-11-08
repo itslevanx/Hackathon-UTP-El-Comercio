@@ -105,6 +105,18 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 12),
 
+          _PrimaryCivicActionButton(
+            buttonKey: const Key('btn_home_explorar_mapa'),
+            label: 'Explorar mapa',
+            subtitle: 'Servicios, favores, recursos y avisos cercanos',
+            icon: Icons.map_outlined,
+            backgroundColor: AppTheme.surfaceCard,
+            foregroundColor: AppTheme.textPrimary,
+            borderColor: AppTheme.borderSoft,
+            onTap: () => c.navigateTo(AppSection.explorarMapa),
+          ),
+          const SizedBox(height: 12),
+
           // 5. Ver favores y ayudar (3 clics total: Inicio -> abrir solicitud -> Enviar oferta de ayuda)
           _PrimaryCivicActionButton(
             buttonKey: const Key('btn_home_ver_favores'),

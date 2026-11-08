@@ -9,6 +9,9 @@ import '../shared/peru_location_selector.dart';
 import '../../core/state/app_controller.dart';
 import '../../core/theme/app_theme.dart';
 import 'auth_error_message.dart';
+import '../maps/location_picker_screen.dart';
+import '../../core/maps/carto_basemap.dart';
+import '../../core/maps/chosen_map_location.dart';
 
 /// Pantalla de registro, inicio de sesión, cambio de cuenta, cierre de sesión
 /// y configuración de zona manual / ubicación opcional por GPS.
@@ -42,6 +45,8 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
   PeruLocationSelection _location = const PeruLocationSelection.empty();
   bool _locationChanged = false;
   bool _useOptionalGps = false;
+  double? _pinLat;
+  double? _pinLng;
   double? _gpsLat;
   double? _gpsLng;
   bool _requestingGps = false;
@@ -96,16 +101,20 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
           ? 'Zona general del distrito'
           : _sectorController.text.trim(),
       code: district.code,
-      lat: _useOptionalGps
-          ? _gpsLat
-          : !_locationChanged
-          ? c.activeLat
-          : district.capitalLat,
-      lng: _useOptionalGps
-          ? _gpsLng
-          : !_locationChanged
-          ? c.activeLng
-          : district.capitalLng,
+      lat:
+          _pinLat ??
+          (_useOptionalGps
+              ? _gpsLat
+              : !_locationChanged
+              ? c.activeLat
+              : district.capitalLat),
+      lng:
+          _pinLng ??
+          (_useOptionalGps
+              ? _gpsLng
+              : !_locationChanged
+              ? c.activeLng
+              : district.capitalLng),
     );
   }
 
@@ -144,6 +153,8 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
       );
       if (!mounted) return;
       setState(() {
+        _pinLat = null;
+        _pinLng = null;
         _gpsLat = AppConfig.roundPublicCoordinate(position.latitude);
         _gpsLng = AppConfig.roundPublicCoordinate(position.longitude);
         _useOptionalGps = true;
@@ -383,11 +394,60 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
                       _useOptionalGps = false;
                       _gpsLat = null;
                       _gpsLng = null;
+                      _pinLat = null;
+                      _pinLng = null;
                     }
                     _locationChanged = true;
                     _location = next;
                   }),
                 ),
+                OutlinedButton.icon(
+                  key: const Key('btn_choose_profile_pin'),
+                  onPressed: _location.districtCode == null
+                      ? null
+                      : () async {
+                          final district = c.locationCatalog.district(
+                            _location.districtCode,
+                          );
+                          final choice =
+                              await Navigator.push<ChosenMapLocation>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => LocationPickerScreen(
+                                    catalog: c.locationCatalog,
+                                    districtUbigeo: _location.districtCode,
+                                    initialPoint: approximateMapPoint(
+                                      _pinLat ??
+                                          (_locationChanged
+                                              ? district?.capitalLat
+                                              : c.activeLat),
+                                      _pinLng ??
+                                          (_locationChanged
+                                              ? district?.capitalLng
+                                              : c.activeLng),
+                                    ),
+                                  ),
+                                ),
+                              );
+                          if (!mounted || choice == null) return;
+                          setState(() {
+                            _location = c.locationCatalog.selectionForDistrict(
+                              choice.districtUbigeo,
+                            );
+                            _pinLat = choice.publicLat;
+                            _pinLng = choice.publicLng;
+                            _locationChanged = true;
+                            _useOptionalGps = false;
+                          });
+                        },
+                  icon: const Icon(Icons.add_location_alt_outlined),
+                  label: Text(
+                    _pinLat == null
+                        ? 'Elegir punto en el mapa o buscar dirección'
+                        : 'Cambiar punto seleccionado',
+                  ),
+                ),
+
                 TextField(
                   key: const Key('input_location_reference'),
                   contextMenuBuilder: buildTextSelectionToolbar,

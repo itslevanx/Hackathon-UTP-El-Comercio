@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../core/accessibility/text_input_support.dart';
 
 import 'package:flutter/material.dart';
@@ -6,6 +8,9 @@ import '../../core/models/domain_models.dart';
 import '../../core/state/app_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../shared/civic_widgets.dart';
+import '../maps/location_picker_screen.dart';
+import '../../core/maps/chosen_map_location.dart';
+import '../../core/maps/carto_basemap.dart';
 
 /// Pantalla de publicación y reporte rápido que respeta estrictamente el
 /// presupuesto de clics:
@@ -32,6 +37,7 @@ class _PublishScreenState extends State<PublishScreen> {
   bool _explicitResourceShareConsent = false;
   String? _errorMessage;
   bool _submitting = false;
+  ChosenMapLocation? _location;
 
   @override
   void initState() {
@@ -72,6 +78,15 @@ class _PublishScreenState extends State<PublishScreen> {
         _titleController.text = draft.title;
         _descController.text = draft.description;
         _availabilityController.text = draft.availabilityText;
+        if (draft.locationJson.isNotEmpty) {
+          try {
+            _location = ChosenMapLocation.tryFromMap(
+              jsonDecode(draft.locationJson) as Map<String, dynamic>,
+            );
+          } catch (_) {
+            _location = null;
+          }
+        }
       });
     }
   }
@@ -80,7 +95,8 @@ class _PublishScreenState extends State<PublishScreen> {
     final user = widget.controller.currentUser;
     if (user == null) return;
     if (_titleController.text.trim().isEmpty &&
-        _descController.text.trim().isEmpty) {
+        _descController.text.trim().isEmpty &&
+        _location == null) {
       return;
     }
     await widget.controller.database.saveDraft(
@@ -91,6 +107,7 @@ class _PublishScreenState extends State<PublishScreen> {
         title: _titleController.text,
         description: _descController.text,
         category: _selectedCategory,
+        locationJson: _location == null ? '' : jsonEncode(_location!.toMap()),
         availabilityText: _availabilityController.text,
         priority: _selectedKind.isEmergency
             ? PublicationPriority.emergencia
@@ -134,6 +151,7 @@ class _PublishScreenState extends State<PublishScreen> {
         description: _descController.text,
         availabilityText: _availabilityController.text,
         shareResourceConsent: _explicitResourceShareConsent,
+        location: _location,
       );
       if (mounted) {
         setState(() {
@@ -252,6 +270,39 @@ class _PublishScreenState extends State<PublishScreen> {
                   ),
                 ],
 
+                OutlinedButton.icon(
+                  key: const Key('btn_choose_publication_pin'),
+                  onPressed: () async {
+                    final choice = await Navigator.push<ChosenMapLocation>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => LocationPickerScreen(
+                          catalog: c.locationCatalog,
+                          districtUbigeo:
+                              _location?.districtUbigeo ??
+                              c.activeDistrictUbigeo,
+                          initialPoint:
+                              _location?.point ??
+                              approximateMapPoint(c.activeLat, c.activeLng),
+                          allowExactService: _selectedKind.isService,
+                        ),
+                      ),
+                    );
+                    if (!mounted || choice == null) return;
+                    setState(() => _location = choice);
+                    await _persistDraftSilently();
+                  },
+                  icon: const Icon(Icons.add_location_alt_outlined),
+                  label: Text(
+                    _location == null
+                        ? 'Ubicación de esta publicación (opcional)'
+                        : 'Cambiar ubicación de esta publicación',
+                  ),
+                ),
+                if (_location?.shareExactService == true)
+                  const Text(
+                    'Se compartirá el punto exacto de atención de este servicio.',
+                  ),
                 const SizedBox(height: 16),
                 TextField(
                   contextMenuBuilder: buildTextSelectionToolbar,
@@ -426,6 +477,12 @@ class _PublishScreenState extends State<PublishScreen> {
       onSelected: (_) {
         setState(() {
           _selectedKind = kind;
+          if (!kind.isService && _location != null) {
+            _location = ChosenMapLocation(
+              point: _location!.point,
+              districtUbigeo: _location!.districtUbigeo,
+            );
+          }
           _selectedCategory = _defaultCategoryForKind(kind);
           widget.controller.setPublishPresetKind(kind);
         });

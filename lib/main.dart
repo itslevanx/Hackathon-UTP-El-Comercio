@@ -17,6 +17,7 @@ import 'features/emergencies/emergency_hub_screen.dart';
 import 'features/favors/favor_detail_screen.dart';
 import 'features/favors/favors_screen.dart';
 import 'features/home/home_screen.dart';
+import 'features/maps/explore_map_screen.dart';
 import 'features/practice/practice_simulator.dart';
 import 'features/publish/publish_screen.dart';
 import 'features/services/service_detail_screen.dart';
@@ -196,6 +197,8 @@ class _MainCivicShell extends StatelessWidget {
         return FavorsScreen(controller: controller);
       case AppSection.detalleFavor:
         return FavorDetailScreen(controller: controller);
+      case AppSection.explorarMapa:
+        return ExploreMapScreen(controller: controller);
       case AppSection.emergencias:
         return EmergencyHubScreen(controller: controller);
       case AppSection.chatLista:

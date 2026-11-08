@@ -1,11 +1,11 @@
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/accessibility/accessibility_controller.dart';
 import '../../core/models/domain_models.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/maps/carto_basemap.dart';
+import '../../core/maps/explore_map_controller.dart';
+import '../maps/neighborhood_map.dart';
 
 /// Cabecera cívica accesible presente en toda la app:
 /// - Nombre provisional centralizado (`NEXO`)
@@ -378,52 +378,12 @@ class AccessibleQuadrantMapWidget extends StatelessWidget {
       const Text(
         'También puedes elegir un resultado en la lista de abajo. El mapa necesita internet.',
       ),
-      if (online)
-        SizedBox(
-          height: 300,
-          child: FlutterMap(
-            options: MapOptions(
-              initialCenter: LatLng(originLat ?? -9.19, originLng ?? -75.015),
-              initialZoom: originLat != null && originLng != null ? 14 : 5,
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.barriresponde.app',
-              ),
-              MarkerLayer(
-                markers: [
-                  for (final p in publications)
-                    if (p.approxLat != null && p.approxLng != null)
-                      Marker(
-                        point: LatLng(p.approxLat!, p.approxLng!),
-                        width: 48,
-                        height: 48,
-                        child: IconButton(
-                          tooltip: p.title,
-                          onPressed: () => onSelectPublication(p),
-                          icon: const Icon(
-                            Icons.location_on,
-                            color: AppTheme.urgentRed,
-                            size: 36,
-                          ),
-                        ),
-                      ),
-                ],
-              ),
-              RichAttributionWidget(
-                attributions: [
-                  TextSourceAttribution(
-                    'OpenStreetMap contributors',
-                    onTap: () => launchUrl(
-                      Uri.parse('https://www.openstreetmap.org/copyright'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+      NeighborhoodMap(
+        online: online,
+        records: publications.map(NeighborhoodMapRecord.publication).toList(),
+        center: approximateMapPoint(originLat, originLng),
+        onSelect: (record) => onSelectPublication(record.publication!),
+      ),
       for (final publication in publications)
         Padding(
           padding: const EdgeInsets.only(top: 8),

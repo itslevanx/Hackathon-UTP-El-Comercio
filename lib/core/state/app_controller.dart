@@ -39,6 +39,7 @@ enum AppSection {
   favores,
   detalleFavor,
   emergencias,
+  explorarMapa,
   chatLista,
   chatConversacion,
   misActividades,

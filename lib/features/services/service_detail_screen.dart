@@ -203,6 +203,11 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                     height: 1.4,
                   ),
                 ),
+                if (srv.shareServiceLocation) ...[
+                  const SizedBox(height: 12),
+                  const Text('Punto de atención compartido por el autor'),
+                  if (srv.serviceAddress.isNotEmpty) Text(srv.serviceAddress),
+                ],
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.all(12),
