@@ -21,6 +21,8 @@
 	<string>Con tu permiso, usamos una zona aproximada para mostrar servicios cercanos. También puedes elegir tu barrio manualmente.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Conecta2 usa el micrófono solo cuando eliges dictar un aviso. El audio se procesa y elimina en tu teléfono.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

@@ -168,7 +168,8 @@ class _EmergencyGroupChatScreenState extends State<EmergencyGroupChatScreen> {
       builder: (context, constraints) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (constraints.maxHeight > 260)
+          if (constraints.maxHeight >
+              260 * MediaQuery.textScalerOf(context).scale(1))
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: Column(

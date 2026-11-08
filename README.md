@@ -256,7 +256,7 @@ node --check protipo/prototype.js
 node --check protipo/practice.js
 ```
 
-La revisión anterior de las funciones existentes se comprobó también con SQL en Supabase. La validación de los módulos comunitarios nuevos se describe al final de este documento y se ejecuta sobre una base aislada.
+La revisión actual cuenta con 76 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y una advertencia de autenticación: la protección contra contraseñas filtradas está desactivada en el proyecto. Los avisos informativos de las tablas privadas sin políticas corresponden a su acceso cerrado a clientes.
 
 La app se compiló y abrió en un simulador iPhone con iOS 27.1, donde se completaron las cinco misiones del simulacro de sismo. También se probaron la selección Amazonas → Chachapoyas → Chachapoyas, el guardado local de la zona, la búsqueda nativa de una referencia pública y el arrastre del pin, sin crear una cuenta. Todavía falta comprobar las conversaciones y la sincronización entre sesiones reales, GPS, VoiceOver y TalkBack. No hay APK validado: falta instalar el Android SDK en el entorno de revisión.
 
@@ -289,6 +289,72 @@ Desde «Mis publicaciones y reportes» también puedes editar o eliminar tus avi
 Los chats privados se agrupan por vecino, aunque lo contactes desde distintos servicios. El mensaje de contacto conserva el nombre del aviso como contexto. Los historiales anteriores se reúnen sin borrar sus mensajes y los borradores pendientes se conservan. La lista se ordena por el último mensaje, con los chats fijados primero; recibe cambios en tiempo real y consulta de nuevo al recuperar conexión.
 
 La migración `20261108163300_neighbor_chats_and_activity.sql` añade consultas y envíos entre vecinos con RLS, reutilización de la conversación existente e historial paginado. No elimina hilos ni mensajes históricos. Sus verificaciones están en `supabase/tests/neighbor_chat_verification.sql`.
+
+## Asistente vecinal por voz
+
+El micrófono circular del centro de la navegación abre el dictado para usuarios con sesión activa. También permite escribir cuando no se puede usar el micrófono. El recorrido es: hablar, terminar la grabación, corregir la descripción y la zona, revisar el formulario habitual y pulsar su botón de envío. **Ni la transcripción ni la clasificación publican o mandan mensajes automáticamente.**
+
+La captura usa `record` 7.1.2 con WAV mono de 16 kHz y 16 bits, limitado a 30 segundos. Un puente FFI local, `packages/conecta2_voice`, integra [whisper.cpp 1.9.5](https://github.com/ggml-org/whisper.cpp/tree/v1.9.5) desde fuentes verificadas. La inferencia corre en otro isolate, en CPU, con hasta cuatro hilos y una sola operación simultánea. Cada operación libera el contexto del modelo. Cancelar solicita la interrupción nativa; la carga inicial del modelo debe terminar antes de que se libere su contexto. No se usan servicios de reconocimiento del sistema que puedan recurrir a la nube.
+
+Se eligió un puente pequeño sobre el proyecto original para fijar la versión, controlar la cancelación y evitar bindings que descargan modelos o registran transcripciones sin control de la aplicación. El backend de voz no depende de Supabase, Firebase ni CARTO.
+
+### Modelo y privacidad
+
+El modelo es **Whisper base multilingüe cuantizado Q5_1**, con español fijado como idioma de reconocimiento, sin traducción al inglés. El archivo `ggml-base-q5_1.bin` ocupa **59.707.625 bytes**, unos 60 MB. Se descarga desde el [repositorio del modelo](https://huggingface.co/ggerganov/whisper.cpp/tree/5359861c739e955e79d9a303bcbc70fb988958b1), únicamente al confirmar el diálogo de descarga. La revisión y el SHA-256 están fijados en `voice_model_store.dart`; el tamaño y el hash se comprueban antes de instalarlo y al volver a abrir el asistente. Los archivos incompletos se eliminan. La descarga puede cancelarse y requiere internet; después la transcripción y el análisis funcionan sin conexión.
+
+El modelo se guarda en el almacenamiento de soporte de la app, fuera del instalador. whisper.cpp y el modelo tienen licencia MIT; `record` 7.1.2 usa BSD de tres cláusulas. sus fuentes y atribuciones figuran en `assets/licenses/whisper.txt` y en el registro de licencias de Flutter. Las fuentes nativas y el XCFramework se reconstruyen localmente y no se versionan como binarios.
+
+El audio permanece en el directorio temporal privado del teléfono y se retira al terminar, cancelar o fallar. Al abrir la app se intenta limpiar cualquier temporal restante de una terminación del proceso. Salir de la pantalla o interrumpir la app cancela la captura. No hay escucha permanente, servicios de grabación en segundo plano ni palabras de activación. No se registra el audio ni el texto reconocido en logs; el motor nativo silencia sus logs de inferencia. Ningún cliente HTTP recibe audio: su único uso en este módulo es descargar el modelo público.
+
+### Análisis y revisión
+
+`VoiceAnalyzer` normaliza tildes y espacios y aplica reglas locales para sismos, incendios, inundaciones, derrumbes, accidentes, cortes de servicios, recursos y asistencia. Detecta cantidades explícitas y nombres del catálogo UBIGEO instalado. Las negaciones y las expresiones de incertidumbre reducen falsos positivos; una situación sin información suficiente queda sin clasificar. Las reglas críticas y urgentes se pueden ampliar mediante `VoiceRules`.
+
+Las prioridades Baja y Media se guardan como `normal`, Alta como `urgente` y Atención inmediata como `emergencia`, respetando los tres valores del dominio existente. Son sugerencias explicadas, no diagnósticos ni confirmaciones oficiales. La advertencia de contactar a los servicios oficiales aparece antes de grabar. La app no da instrucciones de rescate ni sustituye esos servicios.
+
+Los distritos con nombres repetidos o varias ubicaciones mencionadas requieren confirmación con `PeruLocationSelector`. Mencionar un distrito **no obtiene ni reutiliza GPS del perfil**. El borrador no contiene coordenadas; el vecino puede elegir un punto después mediante el selector de mapa existente. En el formulario final se pueden corregir el tipo de publicación, la categoría, la prioridad, el distrito, el título y la descripción.
+
+Al continuar se prepara un `FormDraft` en SQLite, con los metadatos de voz dentro de `location_json`, sin nueva tabla ni migración. Si ya existe un borrador de ese tipo, se pide confirmación y se conserva una copia anterior. El envío usa `AppController.submitPublication` y la misma transacción y cola de sincronización de los formularios habituales. Sin internet queda pendiente; no se afirma que otros vecinos hayan recibido el aviso. La zona del perfil no cambia por dictar otro distrito.
+
+### Preparar otra computadora
+
+Requiere Flutter 3.47.9, Dart 3.13.7, Python 3 y CMake 3.22 o posterior. Se comprobó la preparación nativa con CMake 3.31.10. Para iOS se necesita Xcode y su SDK; el mínimo sigue siendo iOS 15. Para Android hacen falta JDK, Android SDK, NDK y CMake 3.22.1 configurados en Gradle; el proyecto usa API 36 y mínimo API 24.
+
+```sh
+# Android: descarga las fuentes nativas verificadas.
+python3 tools/prepare_voice_engine.py
+
+# iOS: además compila las bibliotecas y crea el XCFramework local.
+python3 tools/prepare_voice_engine.py --ios --cmake /ruta/a/cmake
+
+flutter pub get
+```
+
+El script comprueba el archivo oficial contra un hash fijo. Para iOS genera slices de iPhone arm64 y simulador arm64/x86_64; Swift Package Manager incorpora el puente y el XCFramework. No se cambian Bundle ID, Application ID ni firma. Android compila las mismas fuentes con CMake/NDK y empaqueta `libconecta2_voice.so`, con alineación de página de 16 KB. El puente declara el mismo AGP que la aplicación. El modelo de reconocimiento no se descarga como parte de la compilación: lo prepara el vecino en la app.
+
+Los permisos nuevos son `RECORD_AUDIO` en Android y `NSMicrophoneUsageDescription` en iOS. No se solicita permiso de reconocimiento de voz en la nube ni almacenamiento compartido. La configuración local de Supabase sigue siendo la habitual; en un worktree hay que conservar `.env.local.json` y ejecutar `python3 tools/configure_ios_environment.py` para abrir Xcode con esa configuración.
+
+### Pruebas y límites pendientes
+
+```sh
+flutter analyze
+flutter test
+
+# Prueba opcional del motor real en macOS/Linux con un WAV de prueba local:
+cmake -S packages/conecta2_voice/test -B /tmp/conecta2-voice-validation
+cmake --build /tmp/conecta2-voice-validation --parallel 4
+python3 tools/verify_voice_native.py \
+  --library /tmp/conecta2-voice-validation/libvoice_validation.dylib \
+  --model /ruta/al/ggml-base-q5_1.bin \
+  --audio /ruta/a/prueba-espanol.wav --expect-word agua
+# En Linux, la biblioteca generada termina en .so.
+```
+
+Las pruebas cubren los ejemplos en español, tildes, cantidades, ubicaciones ambiguas, negaciones, incertidumbre, texto vacío, permisos denegados, modelo ausente, descarga inválida, cancelación, errores del motor, preservación de zona y coordenadas, envío bajo confirmación y navegación con texto ampliado. La prueba nativa no graba, no envía audio ni imprime transcripciones. Se verificó el reconocimiento real con un audio sintético en español generado localmente, además de concurrencia, cancelación, silencio y formato WAV inválido.
+
+La validación física de captura, interrupciones, consumo de RAM/CPU, batería, latencia y precisión con ruido o acentos locales sigue pendiente en Android e iPhone. El tiempo medido con audio sintético en una Mac no representa rendimiento móvil. El modelo puede confundir palabras, omitir información o producir texto incorrecto; por eso toda la información queda editable y requiere un envío explícito. La implementación no ofrece transcripción de larga duración ni escucha continua. Android necesita validarse con su SDK/NDK; no se declara compilado cuando esas herramientas faltan.
+
+Validación de esta entrega: `flutter analyze` sin incidencias y **130 pruebas Flutter aprobadas**. Se compiló el XCFramework de iPhone arm64 y simulador arm64/x86_64, además de la app para iOS Simulator y de Release para iPhone sin firma, verificando que AOT conserva los símbolos FFI. La prueba del motor real en macOS reconoció el audio sintético en español y comprobó concurrencia, cancelación, silencio y WAV inválido. Android no se compiló porque esta Mac no tiene Android SDK ni Java Runtime. No se ejecutó ni instaló la app en dispositivos físicos.
 
 ## Riesgos comunitarios y ayudas recomendadas
 

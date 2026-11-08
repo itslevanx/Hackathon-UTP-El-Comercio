@@ -1,3 +1,6 @@
+import '../../core/geography/peru_location_catalog.dart';
+import '../shared/peru_location_selector.dart';
+import '../voice_assistant/voice_assistant_screen.dart';
 import '../../core/intelligence/community_intelligence.dart';
 
 import 'dart:convert';
@@ -40,6 +43,9 @@ class _PublishScreenState extends State<PublishScreen> {
   String? _errorMessage;
   bool _submitting = false;
   ChosenMapLocation? _location;
+  String? _voiceDistrict;
+  PeruLocationSelection _voiceSelection = const PeruLocationSelection.empty();
+  PublicationPriority? _voicePriority;
 
   @override
   void initState() {
@@ -84,9 +90,18 @@ class _PublishScreenState extends State<PublishScreen> {
         _selectedCategory = draft.category;
         if (draft.locationJson.isNotEmpty) {
           try {
-            _location = ChosenMapLocation.tryFromMap(
-              jsonDecode(draft.locationJson) as Map<String, dynamic>,
-            );
+            final data = jsonDecode(draft.locationJson) as Map<String, dynamic>;
+            _location = ChosenMapLocation.tryFromMap(data);
+            if (data['voice_prefill'] is Map) {
+              _voiceDistrict =
+                  (data['voice_prefill'] as Map)['district_ubigeo'] as String?;
+              _voiceSelection = widget.controller.locationCatalog
+                  .selectionForDistrict(_voiceDistrict);
+              _voicePriority = PublicationPriority.fromDb(
+                (data['voice_prefill'] as Map)['priority'] as String? ??
+                    'normal',
+              );
+            }
           } catch (_) {
             _location = null;
           }
@@ -110,11 +125,22 @@ class _PublishScreenState extends State<PublishScreen> {
         title: _titleController.text,
         description: _descController.text,
         category: _selectedCategory,
-        locationJson: _location == null ? '' : jsonEncode(_location!.toMap()),
+        locationJson: _location == null && _voicePriority == null
+            ? ''
+            : jsonEncode({
+                if (_location != null) ..._location!.toMap(),
+                if (_voicePriority != null)
+                  'voice_prefill': {
+                    'district_ubigeo': _voiceDistrict,
+                    'priority': _voicePriority?.dbValue,
+                  },
+              }),
         availabilityText: _availabilityController.text,
-        priority: _selectedKind.isEmergency
-            ? PublicationPriority.emergencia
-            : PublicationPriority.normal,
+        priority:
+            _voicePriority ??
+            (_selectedKind.isEmergency
+                ? PublicationPriority.emergencia
+                : PublicationPriority.normal),
         updatedAt: DateTime.now().toUtc(),
       ),
     );
@@ -149,6 +175,9 @@ class _PublishScreenState extends State<PublishScreen> {
     });
 
     try {
+      if (_voicePriority != null && _voiceDistrict == null) {
+        throw StateError('Confirma departamento, provincia y distrito.');
+      }
       await widget.controller.submitPublication(
         kind: _selectedKind,
         category: _selectedCategory,
@@ -157,6 +186,8 @@ class _PublishScreenState extends State<PublishScreen> {
         availabilityText: _availabilityController.text,
         shareResourceConsent: _explicitResourceShareConsent,
         location: _location,
+        districtUbigeoOverride: _voiceDistrict,
+        priorityOverride: _voicePriority,
       );
       if (mounted) {
         _titleController.clear();
@@ -164,6 +195,8 @@ class _PublishScreenState extends State<PublishScreen> {
         _availabilityController.clear();
         setState(() {
           _location = null;
+          _voicePriority = null;
+          _voiceDistrict = null;
           _explicitResourceShareConsent = false;
           _submitting = false;
         });
@@ -286,37 +319,132 @@ class _PublishScreenState extends State<PublishScreen> {
                   ),
                 ],
 
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  key: ValueKey(
-                    'publication_category_${_selectedKind.name}_$_selectedCategory',
+                if (_voicePriority != null) ...[
+                  const Text(
+                    'Revisa el reporte preparado por voz. Solo se enviará al pulsar el botón de publicar.',
                   ),
-                  initialValue: _selectedCategory,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Categoría del recurso o incidente',
+                  Text(
+                    'Distrito: ${c.locationCatalog.district(_voiceDistrict)?.name ?? 'Confirma el distrito'} · Categoría: ${_selectedCategory.replaceAll('_', ' ')}',
                   ),
-                  items:
-                      {
-                            _selectedCategory: CommunityCategories.label(
-                              _selectedCategory,
-                            ),
-                            ...CommunityCategories.labels,
-                          }.entries
-                          .map(
-                            (e) => DropdownMenuItem(
-                              value: e.key,
-                              child: Text(e.value),
-                            ),
-                          )
-                          .toList(),
-                  onChanged: _submitting
-                      ? null
-                      : (v) {
-                          if (v != null) setState(() => _selectedCategory = v);
-                        },
-                ),
-                const SizedBox(height: 16),
+                  DropdownButtonFormField<PublicationKind>(
+                    initialValue: _selectedKind,
+                    isExpanded: true,
+                    itemHeight: null,
+                    decoration: const InputDecoration(
+                      labelText: 'Tipo de publicación',
+                    ),
+                    items: PublicationKind.values
+                        .map(
+                          (v) =>
+                              DropdownMenuItem(value: v, child: Text(v.label)),
+                        )
+                        .toList(),
+                    onChanged: _submitting
+                        ? null
+                        : (v) {
+                            if (v != null) {
+                              setState(() => _selectedKind = v);
+                              c.setPublishPresetKind(v);
+                              _persistDraftSilently();
+                            }
+                          },
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedCategory,
+                    isExpanded: true,
+                    itemHeight: null,
+                    decoration: const InputDecoration(
+                      labelText: 'Tipo de situación',
+                    ),
+                    items:
+                        {
+                              _selectedCategory: _selectedCategory.replaceAll(
+                                '_',
+                                ' ',
+                              ),
+                              ...VoiceAssistantScreen.labels,
+                            }.entries
+                            .map(
+                              (e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: _submitting
+                        ? null
+                        : (v) {
+                            if (v != null) {
+                              setState(() => _selectedCategory = v);
+                            }
+                          },
+                  ),
+                  const SizedBox(height: 16),
+                  PeruLocationSelector(
+                    catalog: c.locationCatalog,
+                    value: _voiceSelection,
+                    isRequired: true,
+                    onChanged: (v) => setState(() {
+                      _voiceSelection = v;
+                      _voiceDistrict = v.districtCode;
+                      _location = null;
+                    }),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<PublicationPriority>(
+                    initialValue: _voicePriority,
+                    isExpanded: true,
+                    itemHeight: null,
+                    decoration: const InputDecoration(
+                      labelText: 'Prioridad del reporte',
+                    ),
+                    items: PublicationPriority.values
+                        .map(
+                          (v) =>
+                              DropdownMenuItem(value: v, child: Text(v.label)),
+                        )
+                        .toList(),
+                    onChanged: _submitting
+                        ? null
+                        : (v) => setState(() => _voicePriority = v),
+                  ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(
+                      'publication_category_${_selectedKind.name}_$_selectedCategory',
+                    ),
+                    initialValue: _selectedCategory,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Categoría del recurso o incidente',
+                    ),
+                    items:
+                        {
+                              _selectedCategory: CommunityCategories.label(
+                                _selectedCategory,
+                              ),
+                              ...CommunityCategories.labels,
+                            }.entries
+                            .map(
+                              (e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: _submitting
+                        ? null
+                        : (v) {
+                            if (v != null) {
+                              setState(() => _selectedCategory = v);
+                            }
+                          },
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 OutlinedButton.icon(
                   key: const Key('btn_choose_publication_pin'),
                   onPressed: _submitting
@@ -330,6 +458,7 @@ class _PublishScreenState extends State<PublishScreen> {
                                     catalog: c.locationCatalog,
                                     districtUbigeo:
                                         _location?.districtUbigeo ??
+                                        _voiceDistrict ??
                                         c.activeDistrictUbigeo,
                                     initialPoint:
                                         _location?.point ??
@@ -342,7 +471,14 @@ class _PublishScreenState extends State<PublishScreen> {
                                 ),
                               );
                           if (!mounted || choice == null) return;
-                          setState(() => _location = choice);
+                          setState(() {
+                            _location = choice;
+                            if (_voicePriority != null) {
+                              _voiceDistrict = choice.districtUbigeo;
+                              _voiceSelection = c.locationCatalog
+                                  .selectionForDistrict(_voiceDistrict);
+                            }
+                          });
                           await _persistDraftSilently();
                         },
                   icon: const Icon(Icons.add_location_alt_outlined),
