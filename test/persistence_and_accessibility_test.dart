@@ -309,6 +309,92 @@ void main() {
     expect(await db.listOutboxForUser(owner), isEmpty);
   });
 
+  testWidgets('El chat abre al final y desplaza solo el historial', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = LocalSqliteDatabase(engine: InMemoryTransactionalStoreEngine());
+    final remote = SupabaseRemoteGateway(forceSupabaseAvailable: false);
+    final controller = AppController(
+      database: db,
+      remoteGateway: remote,
+      outboxSyncService: OutboxSyncService(database: db, remoteGateway: remote),
+    );
+    await controller.initialize();
+    addTearDown(controller.dispose);
+    final user = controller.currentUser!;
+    final service = controller.publications.firstWhere(
+      (p) => p.id == 'pub-demo-servicio-luis',
+    );
+    final thread = await db.openOrGetConversation(
+      id: 'chat-historial',
+      clientMutationId: 'chat-historial-mutacion',
+      publication: service,
+      participantId: user.id,
+      participantAlias: user.alias,
+    );
+    for (var index = 19; index >= 0; index--) {
+      final isMine = index.isOdd;
+      await db.recordOnlineMessage(
+        id: 'message-$index',
+        clientMutationId: 'mutation-$index',
+        conversationId: thread.id,
+        senderId: isMine ? user.id : service.authorId,
+        senderAlias: isMine ? user.alias : service.authorAlias,
+        body: 'Mensaje $index',
+        syncStatus: SyncStatus.confirmado,
+        createdAt: DateTime.utc(2026, 11, 7, 0, index),
+      );
+    }
+    controller.openConversation(thread);
+    await tester.pumpWidget(
+      NexoNeighborhoodApp(
+        appController: controller,
+        accessibilityController: AccessibilityController(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final history = find.byKey(const Key('chat_message_history'));
+    final input = find.byKey(const Key('input_chat_message_body'));
+    final inputPosition = tester.getTopLeft(input);
+    final previous = tester.getRect(find.text('Mensaje 18'));
+    final latest = tester.getRect(find.text('Mensaje 19'));
+    expect(latest.top, greaterThan(previous.top));
+    expect(latest.left, greaterThan(previous.left));
+    Color? bubbleColor(String id) {
+      final box = tester.widget<DecoratedBox>(
+        find.descendant(
+          of: find.byKey(ValueKey(id)),
+          matching: find.byType(DecoratedBox),
+        ),
+      );
+      return (box.decoration as BoxDecoration).color;
+    }
+
+    expect(bubbleColor('message-19'), isNot(bubbleColor('message-18')));
+    expect(latest.bottom, lessThan(inputPosition.dy));
+    expect(find.textContaining('Sugerencia de seguridad'), findsNothing);
+    await tester.drag(history, const Offset(0, 280));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(input), inputPosition);
+
+    await tester.enterText(input, 'Mensaje nuevo');
+    await tester.tap(find.byKey(const Key('btn_send_chat_message')));
+    await tester.pumpAndSettle();
+    expect(find.text('Mensaje nuevo'), findsOneWidget);
+    expect(tester.widget<CustomScrollView>(history).controller!.offset, 0);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    addTearDown(tester.view.resetViewInsets);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(input).bottom, lessThan(480));
+  });
+
   testWidgets(
     'Pantalla estrecha y texto 200% no desbordan Inicio y publicación',
     (tester) async {

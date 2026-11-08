@@ -797,7 +797,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     final msgId = EntityId.create();
     final msgMutationId = EntityId.create();
 
-    await remoteGateway.sendRealtimeMessage(
+    final message = await remoteGateway.sendRealtimeMessage(
       id: msgId,
       clientMutationId: msgMutationId,
       conversationId: thread.id,
@@ -814,6 +814,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       senderAlias: user.alias,
       body: cleanMessage,
       syncStatus: SyncStatus.confirmado,
+      createdAt: message.createdAt,
     );
 
     await database.deleteDraft(
@@ -943,7 +944,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     final msgId = EntityId.create();
     final mutId = EntityId.create();
 
-    await remoteGateway.sendRealtimeMessage(
+    final message = await remoteGateway.sendRealtimeMessage(
       id: msgId,
       clientMutationId: mutId,
       conversationId: thread.id,
@@ -960,6 +961,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       senderAlias: user.alias,
       body: clean,
       syncStatus: SyncStatus.confirmado,
+      createdAt: message.createdAt,
     );
 
     await database.deleteDraft(

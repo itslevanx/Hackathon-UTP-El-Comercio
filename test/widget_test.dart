@@ -32,6 +32,58 @@ Future<AppController> _createInitializedTestController({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(PeruLocationCatalog.load);
+  testWidgets('Publicar limpia el formulario después de guardar en la cola', (
+    tester,
+  ) async {
+    final controller = await _createInitializedTestController(offline: true);
+    addTearDown(controller.dispose);
+    controller.openQuickPublish(
+      presetKind: PublicationKind.servicio,
+      lockTypeForTwoClickFlow: false,
+    );
+    await tester.pumpWidget(
+      NexoNeighborhoodApp(
+        appController: controller,
+        accessibilityController: AccessibilityController(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final title = find.byKey(const Key('input_publish_title'));
+    final description = find.byKey(const Key('input_publish_description'));
+    final availability = find.byKey(const Key('input_publish_availability'));
+    final submit = find.byKey(const Key('btn_submit_publication'));
+    await tester.enterText(title, 'Arreglo de lámparas');
+    await tester.enterText(availability, 'Sábados por la mañana');
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(title).controller!.text,
+      'Arreglo de lámparas',
+    );
+
+    await tester.enterText(description, 'Reviso lámparas del barrio.');
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    for (final field in [title, description, availability]) {
+      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+    }
+    expect(
+      controller.lastSubmittedPublication?.syncStatus,
+      SyncStatus.pendiente,
+    );
+    expect(
+      await controller.database.getDraft(
+        ownerUserId: controller.currentUser!.id,
+        draftKey: 'publish_servicio',
+      ),
+      isNull,
+    );
+  });
+
   group('1. Presupuesto estricto de <= 3 clics desde Inicio', () {
     testWidgets(
       'Tarea 1 (Pedir ayuda): Inicio -> Necesito ayuda (Clic 1) -> escribir -> Enviar solicitud (Clic 2)',

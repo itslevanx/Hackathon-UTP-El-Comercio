@@ -739,11 +739,12 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
       );
     }
 
+    DateTime? createdAt;
     if (isLiveSupabaseConnected) {
       if (_client.auth.currentUser?.id != senderId) {
         throw StateError('La sesión no coincide con el remitente.');
       }
-      await _client
+      final row = await _client
           .from('messages')
           .upsert(
             {
@@ -755,7 +756,10 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
             },
             onConflict: 'client_mutation_id',
             ignoreDuplicates: true,
-          );
+          )
+          .select('created_at')
+          .maybeSingle();
+      createdAt = DateTime.tryParse(row?['created_at'] as String? ?? '');
     }
 
     if (!isTestDouble && !isLiveSupabaseConnected) _requireRealBackend();
@@ -768,7 +772,7 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
       senderAlias: senderAlias,
       body: body.trim(),
       syncStatus: SyncStatus.confirmado,
-      createdAt: DateTime.now().toUtc(),
+      createdAt: createdAt ?? DateTime.now().toUtc(),
     );
     _realtimeController.add(message);
     return message;
