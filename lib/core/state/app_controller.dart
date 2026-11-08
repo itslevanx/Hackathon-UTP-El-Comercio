@@ -181,7 +181,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   List<Publication> get emergencyGroupChats => publications
       .where(
         (p) =>
-            _visitedEmergencyGroups.contains(p.id) && canViewEmergencyGroup(p),
+            _visitedEmergencyGroups.contains(p.id) &&
+            !_hiddenChats.contains('group:${p.id}') &&
+            canViewEmergencyGroup(p),
       )
       .toList();
   bool canViewEmergencyGroup(Publication publication) {
@@ -223,7 +225,128 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   List<FormDraft> get userDrafts => _userDrafts;
 
   List<ConversationThread> _userConversations = const [];
-  List<ConversationThread> get userConversations => _userConversations;
+  String chatKeyFor(ConversationThread thread) =>
+      'neighbor:${thread.peerIdFor(currentUser!.id)}';
+  String _normalizeChatKey(String key) {
+    final thread = _userConversations
+        .where((t) => 'private:${t.id}' == key)
+        .firstOrNull;
+    return thread == null ? key : chatKeyFor(thread);
+  }
+
+  List<ConversationThread> get userConversations {
+    if (currentUser == null) return const [];
+    final peers = <String, ConversationThread>{};
+    for (final thread in _userConversations) {
+      final key = chatKeyFor(thread), old = peers[key];
+      if (old == null || thread.id.compareTo(old.id) < 0) peers[key] = thread;
+    }
+    return peers.entries
+        .where((e) => !_hiddenChats.contains(e.key))
+        .map((e) => e.value)
+        .toList();
+  }
+
+  Set<String> _pinnedChats = {}, _hiddenChats = {};
+  Map<String, DateTime> _chatActivity = {};
+  DateTime chatLastActivity(String key, DateTime fallback) {
+    key = _normalizeChatKey(key);
+    for (final thread in _userConversations) {
+      if (chatKeyFor(thread) == key && thread.updatedAt.isAfter(fallback)) {
+        fallback = thread.updatedAt;
+      }
+    }
+    final date = _chatActivity[key];
+    return date != null && date.isAfter(fallback) ? date : fallback;
+  }
+
+  bool isChatPinned(String key) =>
+      _pinnedChats.contains(_normalizeChatKey(key));
+  bool _canOrganizeChat(String key) =>
+      currentUser != null &&
+      (_userConversations.any((t) => key == chatKeyFor(t)) ||
+          publications.any(
+            (p) =>
+                key == 'group:${p.id}' &&
+                _visitedEmergencyGroups.contains(p.id) &&
+                canViewEmergencyGroup(p),
+          ));
+
+  Future<void> setChatPinned(String chatKey, bool pinned) async {
+    chatKey = _normalizeChatKey(chatKey);
+    if (!_canOrganizeChat(chatKey)) {
+      throw StateError('Selecciona un chat de tu cuenta.');
+    }
+    final owner = currentUser!.id;
+    await database.saveChatPreference(
+      owner: owner,
+      chatKey: chatKey,
+      pinned: pinned,
+    );
+    if (currentUser?.id == owner) await refreshAllLocalData();
+  }
+
+  Future<void> restoreChat(String chatKey, {bool pinned = false}) async {
+    chatKey = _normalizeChatKey(chatKey);
+    if (!_canOrganizeChat(chatKey)) return;
+    final owner = currentUser!.id;
+    await database.saveChatPreference(
+      owner: owner,
+      chatKey: chatKey,
+      hidden: false,
+      pinned: pinned,
+    );
+    if (currentUser?.id == owner) await refreshAllLocalData();
+  }
+
+  Future<void> hideChat(String chatKey) async {
+    chatKey = _normalizeChatKey(chatKey);
+    if (!_canOrganizeChat(chatKey)) {
+      throw StateError('Selecciona un chat de tu cuenta.');
+    }
+    final owner = currentUser!.id;
+    await database.saveChatPreference(
+      owner: owner,
+      chatKey: chatKey,
+      hidden: true,
+    );
+    if (currentUser?.id == owner) await refreshAllLocalData();
+  }
+
+  bool _refreshingChatActivity = false;
+  Future<void> refreshChatActivity() async {
+    final owner = currentUser?.id;
+    if (owner == null ||
+        _disposed ||
+        isOfflineMode ||
+        _refreshingChatActivity ||
+        !remoteGateway.isLiveSupabaseConnected) {
+      return;
+    }
+    _refreshingChatActivity = true;
+    try {
+      final activity = await remoteGateway
+          .fetchChatActivity(_visitedEmergencyGroups.toList())
+          .timeout(const Duration(seconds: 15));
+      if (_disposed || currentUser?.id != owner) return;
+      final known = {
+        for (final thread in _userConversations) chatKeyFor(thread),
+      };
+      if (activity.keys.any(
+        (key) => key.startsWith('neighbor:') && !known.contains(key),
+      )) {
+        final rows = await remoteGateway.fetchConversationList().timeout(
+          const Duration(seconds: 15),
+        );
+        if (_disposed || currentUser?.id != owner) return;
+        await database.mergeCommunitySnapshot({'conversations': rows});
+      }
+      await database.mergeChatActivity(owner, activity);
+      await refreshAllLocalData();
+    } finally {
+      _refreshingChatActivity = false;
+    }
+  }
 
   DateTime? _lastSyncTimestamp;
   DateTime? get lastSyncTimestamp => _lastSyncTimestamp;
@@ -509,6 +632,17 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _visitedEmergencyGroups = _currentUser == null
         ? {}
         : await database.visitedEmergencyGroups(activeId);
+    if (_currentUser != null) {
+      await database.migrateNeighborChatPreferences(activeId);
+    }
+    _chatActivity = _currentUser == null
+        ? {}
+        : await database.readChatActivity(activeId);
+    final chatPreferences = _currentUser == null
+        ? (pinned: <String>{}, hidden: <String>{})
+        : await database.readChatPreferences(activeId);
+    _pinnedChats = chatPreferences.pinned;
+    _hiddenChats = chatPreferences.hidden;
     _userOutbox = await database.listOutboxForUser(activeId);
     _userDrafts = await database.listDraftsForUser(activeId);
     _userConversations = _currentUser == null
@@ -795,20 +929,43 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       throw StateError('Inicia sesión para contactar a este vecino.');
     }
 
-    final cleanMessage = initialMessage.trim().isEmpty
+    final initialText = initialMessage.trim().isEmpty
         ? 'Hola ${publication.authorAlias}, vi tu publicación en el barrio y quisiera coordinar.'
         : initialMessage.trim();
 
+    final peers = [user.id, publication.authorId]..sort();
+    final contextId = EntityId.forContext('conversation:${peers.join(':')}');
     final thread = await database.openOrGetConversation(
-      id: EntityId.forContext('conversation:${publication.id}:${user.id}'),
-      clientMutationId: EntityId.forContext(
-        'conversation:${publication.id}:${user.id}',
-      ),
+      id: contextId,
+      clientMutationId: contextId,
       publication: publication,
       participantId: user.id,
       participantAlias: user.alias,
     );
 
+    final cleanMessage = 'Sobre «${publication.title}»: $initialText';
+
+    await database.saveChatPreference(
+      owner: user.id,
+      chatKey: 'neighbor:${thread.peerIdFor(user.id)}',
+      hidden: false,
+    );
+
+    await database.consolidateNeighborDrafts(user.id, thread.id);
+    final previous = await database.getDraft(
+      ownerUserId: user.id,
+      draftKey: 'chat_${thread.id}',
+    );
+    if (previous != null &&
+        previous.description.isNotEmpty &&
+        previous.description != cleanMessage) {
+      await database.saveDraft(
+        FormDraft.fromSqlMap({
+          ...previous.toSqlMap(),
+          'draft_key': 'saved_chat_${EntityId.create()}',
+        }),
+      );
+    }
     await database.saveDraft(
       FormDraft(
         draftKey: 'chat_${thread.id}',
@@ -844,6 +1001,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       return thread;
     }
 
+    await remoteGateway.ensureNeighborConversation(
+      id: thread.id,
+      mutationId: thread.clientMutationId,
+      publicationId: publication.id,
+    );
+
     final msgId = EntityId.create();
     final msgMutationId = EntityId.create();
 
@@ -851,6 +1014,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       id: msgId,
       clientMutationId: msgMutationId,
       conversationId: thread.id,
+      recipientId: thread.peerIdFor(user.id),
       senderId: user.id,
       senderAlias: user.alias,
       body: cleanMessage,
@@ -1001,6 +1165,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       id: msgId,
       clientMutationId: mutId,
       conversationId: thread.id,
+      recipientId: thread.peerIdFor(user.id),
       senderId: user.id,
       senderAlias: user.alias,
       body: clean,
@@ -1033,6 +1198,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     }
     final uid = currentUser!.id;
     await database.markEmergencyGroupVisited(uid, publication.id);
+    await database.saveChatPreference(
+      owner: uid,
+      chatKey: 'group:${publication.id}',
+      hidden: false,
+    );
     if (currentUser?.id != uid) return;
     _selectedEmergencyGroup = publication;
     await refreshAllLocalData();
@@ -1098,7 +1268,18 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     if (currentUser?.id == uid) await refreshAllLocalData();
   }
 
-  void openConversation(ConversationThread thread) {
+  Future<void> openConversation(ConversationThread thread) async {
+    final owner = currentUser?.id;
+    if (owner == null || !thread.involvesUser(owner)) return;
+    await database.saveChatPreference(
+      owner: owner,
+      chatKey: 'neighbor:${thread.peerIdFor(owner)}',
+      hidden: false,
+    );
+    if (currentUser?.id != owner) return;
+    await database.consolidateNeighborDrafts(owner, thread.id);
+    await refreshAllLocalData();
+    if (currentUser?.id != owner) return;
     _selectedConversation = thread;
     navigateTo(AppSection.chatConversacion);
   }

@@ -1671,6 +1671,131 @@ class LocalSqliteDatabase {
 
   /// Abre o recupera una conversación contextual única entre dos participantes
   /// autenticados sobre una publicación o solicitud.
+  static Future<void> _recordChatActivity(
+    LocalStoreTransaction txn,
+    String owner,
+    String chatKey,
+    DateTime date,
+  ) async {
+    final key = 'chat_activity:$owner:$chatKey';
+    final old = await txn.query(
+      'cache_metadata',
+      where: 'cache_key = ?',
+      whereArgs: [key],
+    );
+    final previous = old.isEmpty
+        ? null
+        : DateTime.tryParse(old.first['last_synced_at'] as String);
+    if (previous == null || date.isAfter(previous)) {
+      await txn.upsert('cache_metadata', 'cache_key', {
+        'cache_key': key,
+        'last_synced_at': date.toUtc().toIso8601String(),
+      });
+    }
+  }
+
+  Future<Map<String, DateTime>> readChatActivity(String owner) async {
+    final rows = await _engine.query('cache_metadata');
+    final prefix = 'chat_activity:$owner:';
+    return {
+      for (final row in rows)
+        if ((row['cache_key'] as String).startsWith(prefix))
+          (row['cache_key'] as String).substring(prefix.length): DateTime.parse(
+            row['last_synced_at'] as String,
+          ),
+    };
+  }
+
+  Future<void> mergeChatActivity(
+    String owner,
+    Map<String, DateTime> activity,
+  ) async {
+    await _engine.runInTransaction((txn) async {
+      for (final entry in activity.entries) {
+        await _recordChatActivity(txn, owner, entry.key, entry.value);
+      }
+    });
+  }
+
+  Future<void> migrateNeighborChatPreferences(String owner) async {
+    final threads = await listConversationsForUser(owner);
+    final redirects = {
+      for (final thread in threads)
+        for (final type in ['pin', 'hidden'])
+          'chat_$type:$owner:private:${thread.id}':
+              'chat_$type:$owner:neighbor:${thread.peerIdFor(owner)}',
+    };
+    await _engine.runInTransaction((txn) async {
+      final rows = await txn.query('cache_metadata');
+      for (final row in rows) {
+        final oldKey = row['cache_key'] as String,
+            key = redirects[row['cache_key']];
+        if (key == null) continue;
+        await txn.upsert('cache_metadata', 'cache_key', {
+          'cache_key': key,
+          'last_synced_at': row['last_synced_at'],
+        });
+        await txn.delete(
+          'cache_metadata',
+          where: 'cache_key = ?',
+          whereArgs: [oldKey],
+        );
+      }
+    });
+  }
+
+  /// Preferencias privadas de este teléfono, separadas por cuenta y tipo de chat.
+  Future<({Set<String> pinned, Set<String> hidden})> readChatPreferences(
+    String owner,
+  ) async {
+    final rows = await _engine.query('cache_metadata');
+    Set<String> keys(String type) {
+      final prefix = 'chat_$type:$owner:';
+      return rows
+          .map((row) => row['cache_key'] as String)
+          .where((key) => key.startsWith(prefix))
+          .map((key) => key.substring(prefix.length))
+          .toSet();
+    }
+
+    return (pinned: keys('pin'), hidden: keys('hidden'));
+  }
+
+  Future<void> saveChatPreference({
+    required String owner,
+    required String chatKey,
+    bool? pinned,
+    bool? hidden,
+  }) async {
+    if (owner.isEmpty ||
+        !(chatKey.startsWith('private:') ||
+            chatKey.startsWith('neighbor:') ||
+            chatKey.startsWith('group:'))) {
+      throw StateError('Selecciona un chat de tu cuenta.');
+    }
+    await _engine.runInTransaction((txn) async {
+      for (final setting in {
+        'pin': hidden == true ? false : pinned,
+        'hidden': hidden,
+      }.entries) {
+        if (setting.value == null) continue;
+        final key = 'chat_${setting.key}:$owner:$chatKey';
+        if (setting.value!) {
+          await txn.upsert('cache_metadata', 'cache_key', {
+            'cache_key': key,
+            'last_synced_at': DateTime.now().toUtc().toIso8601String(),
+          });
+        } else {
+          await txn.delete(
+            'cache_metadata',
+            where: 'cache_key = ?',
+            whereArgs: [key],
+          );
+        }
+      }
+    });
+  }
+
   Future<void> markEmergencyGroupVisited(
     String owner,
     String publicationId,
@@ -1753,6 +1878,12 @@ class LocalSqliteDatabase {
         updatedAt: now,
       );
       await txn.upsert('outbox_operations', 'operation_id', op.toSqlMap());
+      await _recordChatActivity(
+        txn,
+        owner,
+        'group:$publicationId',
+        message.createdAt,
+      );
     });
     return message;
   }
@@ -1776,6 +1907,12 @@ class LocalSqliteDatabase {
           'owner_user_id': owner,
           ...message.toMap(),
         });
+        await _recordChatActivity(
+          txn,
+          owner,
+          'group:${message.publicationId}',
+          message.createdAt,
+        );
       }
     });
   }
@@ -1794,14 +1931,18 @@ class LocalSqliteDatabase {
     }
 
     return _engine.runInTransaction((txn) async {
-      final existing = await txn.query(
-        'conversations_local',
-        where: 'publication_id = ? AND participant_id = ?',
-        whereArgs: [publication.id, participantId],
-      );
-      if (existing.isNotEmpty) {
-        return ConversationThread.fromSqlMap(existing.first);
-      }
+      final rows = await txn.query('conversations_local');
+      final existing =
+          rows
+              .map(ConversationThread.fromSqlMap)
+              .where(
+                (thread) =>
+                    thread.involvesUser(participantId) &&
+                    thread.peerIdFor(participantId) == publication.authorId,
+              )
+              .toList()
+            ..sort((a, b) => a.id.compareTo(b.id));
+      if (existing.isNotEmpty) return existing.first;
 
       final now = DateTime.now().toUtc();
       final thread = ConversationThread(
@@ -1873,11 +2014,20 @@ class LocalSqliteDatabase {
       );
     }
 
-    final msgRows = await _engine.query(
-      'messages_local',
-      where: 'conversation_id = ?',
-      whereArgs: [conversationId],
-    );
+    final peers = await listConversationsForUser(actingUserId);
+    final peer = conv.peerIdFor(actingUserId);
+    final msgRows = <Map<String, Object?>>[];
+    for (final thread in peers.where(
+      (t) => t.peerIdFor(actingUserId) == peer,
+    )) {
+      msgRows.addAll(
+        await _engine.query(
+          'messages_local',
+          where: 'conversation_id = ?',
+          whereArgs: [thread.id],
+        ),
+      );
+    }
     return msgRows.map(ChatMessage.fromSqlMap).toList()..sort((a, b) {
       final byTime = a.createdAt.compareTo(b.createdAt);
       return byTime == 0 ? a.id.compareTo(b.id) : byTime;
@@ -1926,6 +2076,14 @@ class LocalSqliteDatabase {
       );
 
       await txn.upsert('messages_local', 'id', msg.toSqlMap());
+      for (final owner in [conv.publicationAuthorId, conv.participantId]) {
+        await _recordChatActivity(
+          txn,
+          owner,
+          'neighbor:${conv.peerIdFor(owner)}',
+          msg.createdAt,
+        );
+      }
       return msg;
     });
   }
@@ -1937,6 +2095,52 @@ class LocalSqliteDatabase {
       final compositeMap = Map<String, Object?>.from(draft.toSqlMap());
       compositeMap['draft_key'] = '${draft.ownerUserId}::${draft.draftKey}';
       await txn.upsert('drafts_local', 'draft_key', compositeMap);
+    });
+  }
+
+  Future<void> consolidateNeighborDrafts(
+    String owner,
+    String conversationId,
+  ) async {
+    await _engine.runInTransaction((txn) async {
+      final rows = await txn.query('conversations_local');
+      final threads = rows
+          .map(ConversationThread.fromSqlMap)
+          .where((t) => t.involvesUser(owner))
+          .toList();
+      final selected = threads.where((t) => t.id == conversationId).firstOrNull;
+      if (selected == null) return;
+      final keys = {
+        for (final t in threads)
+          if (t.peerIdFor(owner) == selected.peerIdFor(owner))
+            '$owner::chat_${t.id}',
+      };
+      final drafts = (await txn.query(
+        'drafts_local',
+        where: 'owner_user_id = ?',
+        whereArgs: [owner],
+      )).where((d) => keys.contains(d['draft_key'])).toList();
+      if (drafts.isEmpty) return;
+      final text = drafts
+          .map((d) => d['description'] as String)
+          .where((t) => t.isNotEmpty)
+          .toSet()
+          .join('\n\n');
+      final target = '$owner::chat_$conversationId';
+      await txn.upsert('drafts_local', 'draft_key', {
+        ...drafts.first,
+        'draft_key': target,
+        'description': text,
+      });
+      for (final draft in drafts) {
+        if (draft['draft_key'] != target) {
+          await txn.delete(
+            'drafts_local',
+            where: 'draft_key = ?',
+            whereArgs: [draft['draft_key']],
+          );
+        }
+      }
     });
   }
 

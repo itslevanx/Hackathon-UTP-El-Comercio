@@ -61,12 +61,16 @@ abstract class RemoteBackendGateway {
     required String id,
     required String clientMutationId,
     required String conversationId,
+    String? recipientId,
     required String senderId,
     required String senderAlias,
     required String body,
   });
 
-  Stream<ChatMessage> watchConversationMessages(String conversationId);
+  Stream<ChatMessage> watchConversationMessages(
+    String conversationId, {
+    String? peerId,
+  });
 }
 
 /// Implementación real conectada a Supabase (Auth, PostgREST, PostGIS RPC y Realtime)
@@ -643,13 +647,14 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
             }, onConflict: 'client_mutation_id');
             break;
           case 'conversation':
-            await _client.from('conversations').upsert({
-              'id': payload['id'],
-              'client_mutation_id': payload['client_mutation_id'],
-              'publication_id': payload['publication_id'],
-              'publication_author_id': payload['publication_author_id'],
-              'participant_id': payload['participant_id'],
-            }, onConflict: 'client_mutation_id');
+            await _client.rpc(
+              'ensure_neighbor_conversation',
+              params: {
+                'p_id': payload['id'],
+                'p_mutation': payload['client_mutation_id'],
+                'p_publication': payload['publication_id'],
+              },
+            );
             break;
           case 'profile':
             final lat = AppConfig.roundOptionalPublicCoordinate(
@@ -748,6 +753,7 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     required String id,
     required String clientMutationId,
     required String conversationId,
+    String? recipientId,
     required String senderId,
     required String senderAlias,
     required String body,
@@ -768,22 +774,37 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
       if (_client.auth.currentUser?.id != senderId) {
         throw StateError('La sesión no coincide con el remitente.');
       }
-      final row = await _client
-          .from('messages')
-          .upsert(
-            {
-              'id': id,
-              'client_mutation_id': clientMutationId,
-              'conversation_id': conversationId,
-              'sender_id': senderId,
-              'body': body.trim(),
+      if (recipientId != null) {
+        final row = Map<String, dynamic>.from(
+          await _client.rpc(
+            'send_neighbor_message',
+            params: {
+              'p_id': id,
+              'p_mutation': clientMutationId,
+              'p_recipient': recipientId,
+              'p_body': body.trim(),
             },
-            onConflict: 'client_mutation_id',
-            ignoreDuplicates: true,
-          )
-          .select('created_at')
-          .maybeSingle();
-      createdAt = DateTime.tryParse(row?['created_at'] as String? ?? '');
+          ) as Map,
+        );
+        createdAt = DateTime.parse(row['created_at'] as String);
+      } else {
+        final row = await _client
+            .from('messages')
+            .upsert(
+              {
+                'id': id,
+                'client_mutation_id': clientMutationId,
+                'conversation_id': conversationId,
+                'sender_id': senderId,
+                'body': body.trim(),
+              },
+              onConflict: 'client_mutation_id',
+              ignoreDuplicates: true,
+            )
+            .select('created_at')
+            .maybeSingle();
+        createdAt = DateTime.tryParse(row?['created_at'] as String? ?? '');
+      }
     }
 
     if (!isTestDouble && !isLiveSupabaseConnected) _requireRealBackend();
@@ -800,6 +821,185 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     );
     _realtimeController.add(message);
     return message;
+  }
+
+  Future<void> ensureNeighborConversation({
+    required String id,
+    required String mutationId,
+    required String publicationId,
+  }) async {
+    if (isTestDouble) return;
+    _requireRealBackend();
+    await _client
+        .rpc(
+          'ensure_neighbor_conversation',
+          params: {
+            'p_id': id,
+            'p_mutation': mutationId,
+            'p_publication': publicationId,
+          },
+        )
+        .timeout(const Duration(seconds: 15));
+  }
+
+  Future<List<Map<String, Object?>>> fetchConversationList() async {
+    if (isTestDouble) return const [];
+    _requireRealBackend();
+    final owner = _client.auth.currentUser!.id;
+    final profiles = await _client.from('profiles').select('id,alias');
+    final aliases = {for (final p in profiles) p['id']: p['alias']};
+    final rows = await _client.from('conversations').select();
+    return rows
+        .map(
+          (row) => <String, Object?>{
+            ...row,
+            'owner_user_id': owner,
+            'sync_status': 'confirmado',
+            'publication_author_alias':
+                aliases[row['publication_author_id']] ?? 'Vecino',
+            'participant_alias': aliases[row['participant_id']] ?? 'Vecino',
+            'publication_title': 'Conversación vecinal',
+          },
+        )
+        .toList();
+  }
+
+  Future<Map<String, DateTime>> fetchChatActivity(List<String> groups) async {
+    if (isTestDouble) return {};
+    _requireRealBackend();
+    final rows = await _client.rpc(
+      'get_my_chat_activity',
+      params: {'p_groups': groups},
+    ) as List;
+    return {
+      for (final row in rows)
+        row['chat_key'] as String: DateTime.parse(
+          row['last_message_at'] as String,
+        ),
+    };
+  }
+
+  Stream<void> watchChatActivity() {
+    if (isTestDouble || !isLiveSupabaseConnected) return const Stream.empty();
+    late StreamController<void> output;
+    RealtimeChannel? channel;
+    output = StreamController<void>(
+      onListen: () {
+        channel = _client
+            .channel('chat-list-${DateTime.now().microsecondsSinceEpoch}')
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'conversations',
+              callback: (_) {
+                if (!output.isClosed) output.add(null);
+              },
+            )
+            .onPostgresChanges(
+              event: PostgresChangeEvent.insert,
+              schema: 'public',
+              table: 'emergency_group_messages',
+              callback: (_) {
+                if (!output.isClosed) output.add(null);
+              },
+            )
+            .subscribe();
+      },
+      onCancel: () async {
+        if (channel != null) await _client.removeChannel(channel!);
+      },
+    );
+    return output.stream;
+  }
+
+  Stream<ChatMessage> _watchNeighborMessages(
+    String localConversationId,
+    String peerId,
+  ) {
+    late StreamController<ChatMessage> output;
+    StreamSubscription<void>? updates;
+    Timer? timer;
+    final owner = _client.auth.currentUser!.id;
+    final seen = <String>{};
+    var busy = false, cancelled = false;
+    Future<void> refresh() async {
+      if (cancelled ||
+          busy ||
+          output.isClosed ||
+          simulateNetworkOffline ||
+          _client.auth.currentUser?.id != owner) {
+        return;
+      }
+      busy = true;
+      try {
+        DateTime? before;
+        String? beforeId;
+        while (!cancelled && _client.auth.currentUser?.id == owner) {
+          final rows =
+              await _client
+                      .rpc(
+                        'list_neighbor_messages_page',
+                        params: {
+                          'p_peer': peerId,
+                          'p_before_time': before?.toUtc().toIso8601String(),
+                          'p_before_id': beforeId,
+                        },
+                      )
+                      .timeout(const Duration(seconds: 15))
+                  as List;
+          if (cancelled ||
+              output.isClosed ||
+              _client.auth.currentUser?.id != owner) {
+            return;
+          }
+          var foundSeen = false;
+          for (final row in rows) {
+            if (!seen.add(row['id'] as String)) {
+              foundSeen = true;
+              continue;
+            }
+            output.add(
+              ChatMessage(
+                id: row['id'] as String,
+                clientMutationId: row['client_mutation_id'] as String,
+                ownerUserId: owner,
+                conversationId: localConversationId,
+                senderId: row['sender_id'] as String,
+                senderAlias: row['sender_alias'] as String,
+                body: row['body'] as String,
+                syncStatus: SyncStatus.confirmado,
+                createdAt: DateTime.parse(row['created_at'] as String),
+              ),
+            );
+          }
+          if (rows.length < 100 || foundSeen) break;
+          before = DateTime.parse(rows.last['created_at'] as String);
+          beforeId = rows.last['id'] as String;
+        }
+      } catch (error) {
+        if (!cancelled && !output.isClosed) output.addError(error);
+      } finally {
+        busy = false;
+      }
+    }
+
+    output = StreamController<ChatMessage>(
+      onListen: () {
+        updates = watchChatActivity().listen((_) {
+          unawaited(refresh());
+        });
+        timer = Timer.periodic(const Duration(seconds: 10), (_) {
+          unawaited(refresh());
+        });
+        unawaited(refresh());
+      },
+      onCancel: () async {
+        cancelled = true;
+        timer?.cancel();
+        await updates?.cancel();
+      },
+    );
+    return output.stream;
   }
 
   Future<List<EmergencyGroupMessage>> fetchEmergencyGroupMessages(
@@ -1031,7 +1231,13 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
   }
 
   @override
-  Stream<ChatMessage> watchConversationMessages(String conversationId) {
+  Stream<ChatMessage> watchConversationMessages(
+    String conversationId, {
+    String? peerId,
+  }) {
+    if (isLiveSupabaseConnected && peerId != null) {
+      return _watchNeighborMessages(conversationId, peerId);
+    }
     if (isLiveSupabaseConnected) {
       return _client
           .from('messages')
