@@ -280,7 +280,7 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
             const SizedBox(height: 14),
           ],
 
-          // Si ya hay sesión activa, permite cambiar de cuenta o cerrar sesión
+          // Datos de la sesión activa y cierre de sesión.
           if (user != null) ...[
             Container(
               padding: const EdgeInsets.all(16),
@@ -313,24 +313,6 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
                     spacing: 10,
                     runSpacing: 10,
                     children: [
-                      OutlinedButton.icon(
-                        key: const Key('btn_switch_to_maria'),
-                        onPressed: () => c.signIn(
-                          email: 'maria@pueblolibre.pe',
-                          password: 'vecinos-pueblo-libre',
-                        ),
-                        icon: const Icon(Icons.person_outline),
-                        label: const Text('Usar cuenta María Castillo'),
-                      ),
-                      OutlinedButton.icon(
-                        key: const Key('btn_switch_to_jorge'),
-                        onPressed: () => c.signIn(
-                          email: 'jorge@pueblolibre.pe',
-                          password: 'vecinos-pueblo-libre',
-                        ),
-                        icon: const Icon(Icons.person_outline),
-                        label: const Text('Usar cuenta Don Jorge'),
-                      ),
                       OutlinedButton.icon(
                         key: const Key('btn_sign_out'),
                         onPressed: c.signOut,
@@ -448,6 +430,7 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
                   ),
                 ),
 
+                const SizedBox(height: 24),
                 TextField(
                   key: const Key('input_location_reference'),
                   contextMenuBuilder: buildTextSelectionToolbar,

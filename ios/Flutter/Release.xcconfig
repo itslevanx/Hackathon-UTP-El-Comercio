@@ -1,1 +1,2 @@
+#include? "../../.env.ios.xcconfig"
 #include "Generated.xcconfig"

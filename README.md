@@ -56,6 +56,15 @@ Crea `.env.local.json` en la raíz con la configuración pública de tu proyecto
 flutter run --dart-define-from-file=.env.local.json
 ```
 
+Para ejecutar con el botón Run de Xcode, prepara también la configuración local:
+
+```sh
+python3 tools/configure_ios_environment.py
+open ios/Runner.xcworkspace
+```
+
+Vuelve a ejecutar el script si cambias `.env.local.json`. Genera `.env.ios.xcconfig`, ignorado por Git; no copies sus valores al proyecto ni al esquema de Xcode. Esta configuración se conserva al ejecutar `flutter pub get`. Si compilas desde Flutter con `--dart-define-from-file`, prevalecen los parámetros de ese comando.
+
 Sin configuración remota, los simulacros siguen disponibles. La app no crea sesiones ficticias ni presenta envíos locales como confirmados.
 
 ## Mapas CARTO
@@ -206,3 +215,11 @@ Desde el detalle de una emergencia puedes entrar a su chat grupal. El acceso se 
 Los mensajes se guardan primero en SQLite y se sincronizan con una clave de idempotencia. Sin conexión, el historial consultado permanece disponible y los mensajes nuevos muestran su estado pendiente hasta recibir confirmación. Los grupos abiertos aparecen en Chats. La caché está separada por cuenta; SQLite se migra de la versión 4 a la 5 sin reemplazar las tablas anteriores.
 
 La migración `20261108071749_emergency_group_chat.sql` añade mensajes de grupo, políticas RLS, RPC de envío e historial y actualizaciones Realtime. La verificación transaccional está en `supabase/tests/emergency_group_chat_verification.sql` y revierte todos sus datos de prueba.
+
+En Chats puedes fijar conversaciones privadas o grupos para tenerlos al principio y quitarlos de tu lista con «Eliminar de mi lista». Estas preferencias se guardan en SQLite por cuenta y teléfono, incluso sin conexión. No borran mensajes ni afectan las listas de otros vecinos. Puedes deshacer la acción o abrir de nuevo el chat desde su publicación. Los grupos y privados comparten burbujas: tus mensajes aparecen a la derecha y los de los demás a la izquierda.
+
+Desde «Mis publicaciones y reportes» también puedes editar o eliminar tus avisos con las mismas reglas de permisos y sincronización del resto de la app.
+
+Los chats privados se agrupan por vecino, aunque lo contactes desde distintos servicios. El mensaje de contacto conserva el nombre del aviso como contexto. Los historiales anteriores se reúnen sin borrar sus mensajes y los borradores pendientes se conservan. La lista se ordena por el último mensaje, con los chats fijados primero; recibe cambios en tiempo real y consulta de nuevo al recuperar conexión.
+
+La migración `20261108163300_neighbor_chats_and_activity.sql` añade consultas y envíos entre vecinos con RLS, reutilización de la conversación existente e historial paginado. No elimina hilos ni mensajes históricos. Sus verificaciones están en `supabase/tests/neighbor_chat_verification.sql`.

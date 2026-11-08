@@ -679,6 +679,9 @@ class ConversationThread {
   bool involvesUser(String userId) =>
       userId == publicationAuthorId || userId == participantId;
 
+  String peerIdFor(String userId) =>
+      userId == publicationAuthorId ? participantId : publicationAuthorId;
+
   String peerAliasFor(String userId) =>
       userId == publicationAuthorId ? participantAlias : publicationAuthorAlias;
 

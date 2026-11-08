@@ -8,122 +8,255 @@ import '../../core/models/domain_models.dart';
 import '../../core/state/app_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../shared/civic_widgets.dart';
+import 'message_bubble.dart';
 
 /// Conversaciones privadas del vecino y grupos de emergencia consultados.
-class ChatListScreen extends StatelessWidget {
+class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key, required this.controller});
 
   final AppController controller;
 
   @override
-  Widget build(BuildContext context) {
-    final threads = controller.userConversations;
+  State<ChatListScreen> createState() => _ChatListScreenState();
+}
 
+class _ChatListScreenState extends State<ChatListScreen> {
+  AppController get controller => widget.controller;
+  StreamSubscription<void>? _activityUpdates;
+  Timer? _activityTimer;
+  String? _owner;
+  @override
+  void initState() {
+    super.initState();
+    _watchActivity();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_owner != controller.currentUser?.id) _watchActivity();
+  }
+
+  void _watchActivity() {
+    _owner = controller.currentUser?.id;
+    unawaited(_activityUpdates?.cancel());
+    _activityTimer?.cancel();
+    if (_owner == null || !controller.remoteGateway.isLiveSupabaseConnected) {
+      return;
+    }
+    _activityUpdates = controller.remoteGateway.watchChatActivity().listen((_) {
+      unawaited(_refresh());
+    });
+    _activityTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      unawaited(_refresh());
+    });
+    unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
+    try {
+      await controller.refreshChatActivity();
+    } catch (_) {
+      /* La lista local permanece disponible. */
+    }
+  }
+
+  @override
+  void dispose() {
+    _activityTimer?.cancel();
+    unawaited(_activityUpdates?.cancel());
+    super.dispose();
+  }
+
+  Future<void> _organize(
+    BuildContext context,
+    String chatKey,
+    String action,
+  ) async {
+    final owner = controller.currentUser?.id;
+    final wasPinned = controller.isChatPinned(chatKey);
+    try {
+      if (action == 'pin') {
+        await controller.setChatPinned(chatKey, !wasPinned);
+      } else {
+        await controller.hideChat(chatKey);
+        if (!context.mounted || controller.currentUser?.id != owner) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Chat quitado solo de tu lista en este teléfono. Los mensajes de los demás se conservan.',
+            ),
+            action: SnackBarAction(
+              label: 'Deshacer',
+              onPressed: () async {
+                if (controller.currentUser?.id == owner) {
+                  await controller.restoreChat(chatKey, pinned: wasPinned);
+                }
+              },
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo actualizar tu lista. Inténtalo de nuevo.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = [
+      for (final t in controller.userConversations)
+        (
+          chatKey: controller.chatKeyFor(t),
+          title: t.peerAliasFor(controller.currentUser!.id),
+          subtitle: 'Chat privado',
+          updated: controller.chatLastActivity(
+            controller.chatKeyFor(t),
+            t.updatedAt,
+          ),
+          status: t.syncStatus as SyncStatus?,
+          tileKey: 'card_conversation_${t.id}',
+          open: () => controller.openConversation(t),
+        ),
+      for (final p in controller.emergencyGroupChats)
+        (
+          chatKey: 'group:${p.id}',
+          title: p.title,
+          subtitle: 'Grupo de emergencia · Vecinos del distrito',
+          updated: controller.chatLastActivity('group:${p.id}', p.createdAt),
+          status: null as SyncStatus?,
+          tileKey: 'emergency_group_${p.id}',
+          open: () => controller.openEmergencyGroup(p),
+        ),
+    ];
+    entries.sort((a, b) {
+      final aPinned = controller.isChatPinned(a.chatKey),
+          bPinned = controller.isChatPinned(b.chatKey);
+      if (aPinned != bPinned) return aPinned ? -1 : 1;
+      final date = b.updated.compareTo(a.updated);
+      return date != 0 ? date : a.chatKey.compareTo(b.chatKey);
+    });
     return SingleChildScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceCard,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.borderSoft),
+          const Text(
+            'Chats',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Tus conversaciones privadas y los grupos de emergencia que has abierto.',
+          ),
+          const SizedBox(height: 16),
+          if (entries.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'Aún no tienes chats en tu lista. Puedes abrir una conversación desde un servicio o una emergencia.',
+              ),
             ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Chats',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.textPrimary,
+          for (var i = 0; i < entries.length; i++) ...[
+            if (i == 0 ||
+                controller.isChatPinned(entries[i - 1].chatKey) !=
+                    controller.isChatPinned(entries[i].chatKey))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8, top: 8),
+                child: Text(
+                  controller.isChatPinned(entries[i].chatKey)
+                      ? 'Fijados'
+                      : 'Conversaciones',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(height: 6),
-                Text(
-                  'Tus conversaciones privadas y los grupos de emergencia que has abierto.',
-                  style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          if (controller.emergencyGroupChats.isNotEmpty) ...[
-            const Text(
-              'Grupos de emergencia',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            for (final p in controller.emergencyGroupChats)
-              Card(
-                child: ListTile(
-                  key: ValueKey('emergency_group_${p.id}'),
-                  leading: const Icon(Icons.groups_outlined),
-                  title: Text(p.title),
-                  subtitle: const Text('Vecinos del mismo distrito'),
-                  onTap: () => controller.openEmergencyGroup(p),
-                ),
               ),
-            const SizedBox(height: 16),
-          ],
-          const Text(
-            'Chats privados',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          if (threads.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceCard,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.borderSoft),
-              ),
-              child: const Text(
-                'Aún no tienes conversaciones activas. Abre cualquier servicio o favor del barrio para enviar una solicitud de contacto.',
-                style: TextStyle(fontSize: 17, color: AppTheme.textSecondary),
-              ),
-            )
-          else
-            for (final t in threads) ...[
-              Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                child: InkWell(
-                  key: Key('card_conversation_${t.id}'),
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: () => controller.openConversation(t),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SyncStatusBadge(status: t.syncStatus),
-                        const SizedBox(height: 8),
-                        Text(
-                          t.publicationTitle,
-                          style: const TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.w800,
-                            color: AppTheme.textPrimary,
-                          ),
+            Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      key: ValueKey(entries[i].tileKey),
+                      onTap: entries[i].open,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  entries[i].chatKey.startsWith('group:')
+                                      ? Icons.groups_outlined
+                                      : Icons.chat_bubble_outline,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    entries[i].title,
+                                    style: const TextStyle(
+                                      fontSize: 19,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                if (controller.isChatPinned(entries[i].chatKey))
+                                  const Icon(
+                                    Icons.push_pin,
+                                    size: 20,
+                                    semanticLabel: 'Chat fijado',
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(entries[i].subtitle),
+                            if (entries[i].status != null) ...[
+                              const SizedBox(height: 8),
+                              SyncStatusBadge(status: entries[i].status!),
+                            ],
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Participantes: ${t.publicationAuthorAlias} y ${t.participantAlias}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.actionGreen,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
+                  PopupMenuButton<String>(
+                    key: ValueKey('chat_options_${entries[i].chatKey}'),
+                    tooltip: 'Opciones de chat',
+                    onSelected: (action) =>
+                        _organize(context, entries[i].chatKey, action),
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'pin',
+                        child: Text(
+                          controller.isChatPinned(entries[i].chatKey)
+                              ? 'Desfijar chat'
+                              : 'Fijar chat',
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'hide',
+                        child: Text('Eliminar de mi lista'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
+          ],
         ],
       ),
     );
@@ -176,7 +309,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       if (!mounted) return;
 
       _realtimeSub ??= widget.controller.remoteGateway
-          .watchConversationMessages(conv.id)
+          .watchConversationMessages(conv.id, peerId: conv.peerIdFor(user.id))
           .listen(
             (message) async {
               try {
@@ -287,7 +420,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      conv.publicationTitle,
+                      conv.peerAliasFor(c.currentUser!.id),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium,
@@ -345,9 +478,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                           final message =
                               _messages[_messages.length - 1 - index];
                           final isMine = message.senderId == c.currentUser?.id;
-                          return _MessageBubble(
+                          return ConversationMessageBubble(
                             key: ValueKey(message.id),
-                            message: message,
+                            senderAlias: message.senderAlias,
+                            body: message.body,
+                            createdAt: message.createdAt,
                             isMine: isMine,
                           );
                         },
@@ -393,55 +528,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           ],
         );
       },
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({
-    super.key,
-    required this.message,
-    required this.isMine,
-  });
-
-  final ChatMessage message;
-  final bool isMine;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) => Align(
-        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.8),
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isMine ? const Color(0xFFBCEAD0) : const Color(0xFFE9EDF2),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isMine ? 'Tú' : message.senderAlias,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-              Text(
-                message.body,
-                style: const TextStyle(
-                  fontSize: 17,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
