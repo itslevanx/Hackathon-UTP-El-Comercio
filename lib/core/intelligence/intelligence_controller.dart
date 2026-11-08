@@ -177,7 +177,7 @@ class IntelligenceController extends ChangeNotifier {
           snapshot = null;
           await app.database.saveIntelligenceCache(key, {});
         }
-        notice = 'No se pudo actualizar. Los datos guardados no confirman alertas ni disponibilidad. Reintenta y comprueba la migración del servidor.';
+        notice = 'No se pudo actualizar. Reintenta cuando tengas conexión.';
       }
     } finally {
       if (!_disposed && ticket == _epoch) {

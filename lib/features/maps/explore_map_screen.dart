@@ -328,63 +328,66 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
               child: const Text('Iniciar sesión'),
             ),
           const SizedBox(height: 12),
-          Text(
-            'Concentraciones vecinales',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const Text(
-            'Avisos no verificados. Un punto individual no confirma una emergencia. Los círculos indican una zona aproximada, no el alcance del incidente.',
-          ),
-          Text(
-            'Distrito de las concentraciones: ${widget.controller.locationCatalog.district(_intelligence.district)?.name ?? 'Sin seleccionar'}',
-          ),
-          if (_intelligence.fetchedAt != null)
-            Text(
-              '${_intelligence.stale ? "Datos guardados, pueden haber caducado" : "Actualizado"}: ${_intelligence.fetchedAt!.toLocal()}',
+          ExpansionTile(
+            key: const Key('risk_map_panel'),
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Riesgos del distrito'),
+            subtitle: Text(
+              '${_visibleRisks.length} concentraciones · Sin verificar',
             ),
-          if (_intelligence.notice != null) Text(_intelligence.notice!),
-          if (_intelligence.loading) const LinearProgressIndicator(),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
             children: [
-              FilterChip(
-                label: const Text('Requieren atención'),
-                selected: _attentionOnly,
-                onSelected: (v) => setState(() => _attentionOnly = v),
+              if (_intelligence.fetchedAt != null)
+                Text(
+                  '${_intelligence.stale ? "Datos guardados, pueden haber caducado" : "Actualizado"}: ${_intelligence.fetchedAt!.toLocal()}',
+                ),
+              if (_intelligence.notice != null) Text(_intelligence.notice!),
+              if (_intelligence.loading) const LinearProgressIndicator(),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('Requieren atención'),
+                    selected: _attentionOnly,
+                    onSelected: (v) => setState(() => _attentionOnly = v),
+                  ),
+                  OutlinedButton(
+                    onPressed: _intelligence.loading
+                        ? null
+                        : _intelligence.refresh,
+                    child: const Text('Actualizar concentraciones'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Todas las categorías'),
+                    selected: _riskCategory == null,
+                    onSelected: (_) => setState(() => _riskCategory = null),
+                  ),
+                  for (final category
+                      in _intelligence.risks.map((r) => r.category).toSet())
+                    ChoiceChip(
+                      label: Text(CommunityCategories.label(category)),
+                      selected: _riskCategory == category,
+                      onSelected: (_) =>
+                          setState(() => _riskCategory = category),
+                    ),
+                ],
               ),
-              OutlinedButton(
-                onPressed: _intelligence.loading ? null : _intelligence.refresh,
-                child: const Text('Actualizar concentraciones'),
-              ),
-              ChoiceChip(
-                label: const Text('Todas las categorías'),
-                selected: _riskCategory == null,
-                onSelected: (_) => setState(() => _riskCategory = null),
-              ),
-              for (final category
-                  in _intelligence.risks.map((r) => r.category).toSet())
-                ChoiceChip(
-                  label: Text(CommunityCategories.label(category)),
-                  selected: _riskCategory == category,
-                  onSelected: (_) => setState(() => _riskCategory = category),
+              if (_visibleRisks.isEmpty)
+                const Text(
+                  'Sin concentraciones disponibles con estos filtros. Los reportes individuales siguen en la lista.',
+                ),
+              for (final risk in _visibleRisks)
+                ListTile(
+                  minTileHeight: 72,
+                  leading: const Icon(Icons.groups),
+                  title: Text(
+                    '${risk.label} · ${CommunityCategories.label(risk.category)}',
+                  ),
+                  subtitle: Text('${risk.neighbors} vecinos · Sin verificar'),
+                  onTap: () => _showRisk(risk),
                 ),
             ],
           ),
-          if (_visibleRisks.isEmpty)
-            const Text(
-              'Sin concentraciones disponibles con estos filtros. Los reportes individuales siguen en la lista.',
-            ),
-          for (final risk in _visibleRisks)
-            ListTile(
-              minTileHeight: 72,
-              leading: const Icon(Icons.groups),
-              title: Text(
-                '${risk.label} · ${CommunityCategories.label(risk.category)}',
-              ),
-              subtitle: Text('${risk.neighbors} vecinos · Sin verificar'),
-              onTap: () => _showRisk(risk),
-            ),
           const SizedBox(height: 12),
           if (!_listOnly)
             NeighborhoodMap(
