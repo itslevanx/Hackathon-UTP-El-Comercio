@@ -1,0 +1,18 @@
+name: conecta2_voice
+description: Puente local de reconocimiento de voz para Conecta2.
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: ^3.13.7
+  flutter: '>=3.35.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  ffi: ^2.1.4
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+      ios:
+        pluginClass: Conecta2VoicePlugin

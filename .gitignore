@@ -90,3 +90,7 @@ venv/
 
 # Caché local de la herramienta de Supabase
 supabase/.temp/
+
+# Fuentes y binarios de voz reconstruibles con tools/prepare_voice_engine.py
+/packages/conecta2_voice/native/
+/packages/conecta2_voice/ios/conecta2_voice/WhisperNative.xcframework/

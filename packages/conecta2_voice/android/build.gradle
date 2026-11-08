@@ -1,0 +1,16 @@
+group 'pe.conecta2.voice'
+version '1.0.0'
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies { classpath 'com.android.tools.build:gradle:9.1.0' }
+}
+apply plugin: 'com.android.library'
+android {
+    namespace 'pe.conecta2.voice'
+    compileSdk 36
+    defaultConfig {
+        minSdk 24
+        externalNativeBuild { cmake { arguments '-DANDROID_STL=c++_shared'; cppFlags '-std=c++17' } }
+    }
+    externalNativeBuild { cmake { path 'CMakeLists.txt'; version '3.22.1' } }
+}
