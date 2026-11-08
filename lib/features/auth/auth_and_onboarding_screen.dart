@@ -504,167 +504,170 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
             ),
           ),
 
-          const SizedBox(height: 16),
+          if (user == null) ...[
+            const SizedBox(height: 16),
 
-          // Formulario de inicio de sesión o registro
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceCard,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.borderSoft),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_requestRecovery)
-                  Text(
-                    'Recuperar contraseña',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  )
-                else
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (final mode in [false, true])
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Semantics(
-                            selected: _isRegisterMode == mode,
-                            child: OutlinedButton(
-                              key: Key(
-                                mode ? 'tab_register_mode' : 'tab_login_mode',
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                backgroundColor: _isRegisterMode == mode
-                                    ? const Color(0xFFC8F5DF)
-                                    : AppTheme.surfaceCard,
-                                minimumSize: const Size(0, 56),
-                              ),
-                              onPressed: _submitting
-                                  ? null
-                                  : () => setState(() {
-                                      _isRegisterMode = mode;
-                                      _errorMessage = null;
-                                    }),
-                              child: Text(
-                                mode
-                                    ? 'Crear cuenta vecinal'
-                                    : 'Iniciar sesión',
-                                textAlign: TextAlign.center,
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceCard,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.borderSoft),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_requestRecovery)
+                    Text(
+                      'Recuperar contraseña',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    )
+                  else
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final mode in [false, true])
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Semantics(
+                              selected: _isRegisterMode == mode,
+                              child: OutlinedButton(
+                                key: Key(
+                                  mode ? 'tab_register_mode' : 'tab_login_mode',
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: _isRegisterMode == mode
+                                      ? const Color(0xFFC8F5DF)
+                                      : AppTheme.surfaceCard,
+                                  minimumSize: const Size(0, 56),
+                                ),
+                                onPressed: _submitting
+                                    ? null
+                                    : () => setState(() {
+                                        _isRegisterMode = mode;
+                                        _errorMessage = null;
+                                      }),
+                                child: Text(
+                                  mode
+                                      ? 'Crear cuenta vecinal'
+                                      : 'Iniciar sesión',
+                                  textAlign: TextAlign.center,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                const SizedBox(height: 14),
-                if (_isRegisterMode) ...[
+                      ],
+                    ),
+                  const SizedBox(height: 14),
+                  if (_isRegisterMode) ...[
+                    TextField(
+                      contextMenuBuilder: buildTextSelectionToolbar,
+                      onTapOutside: dismissTextInput,
+                      key: const Key('input_auth_alias'),
+                      controller: _aliasController,
+                      style: const TextStyle(fontSize: 18),
+                      decoration: const InputDecoration(
+                        labelText: 'Tu nombre o alias público en el barrio',
+                        hintText: 'Ej. Doña Rosa · Sector Candamo',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   TextField(
                     contextMenuBuilder: buildTextSelectionToolbar,
                     onTapOutside: dismissTextInput,
-                    key: const Key('input_auth_alias'),
-                    controller: _aliasController,
+                    key: const Key('input_auth_email'),
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
                     style: const TextStyle(fontSize: 18),
                     decoration: const InputDecoration(
-                      labelText: 'Tu nombre o alias público en el barrio',
-                      hintText: 'Ej. Doña Rosa · Sector Candamo',
+                      labelText: 'Correo electrónico',
                     ),
                   ),
                   const SizedBox(height: 12),
-                ],
-                TextField(
-                  contextMenuBuilder: buildTextSelectionToolbar,
-                  onTapOutside: dismissTextInput,
-                  key: const Key('input_auth_email'),
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  style: const TextStyle(fontSize: 18),
-                  decoration: const InputDecoration(
-                    labelText: 'Correo electrónico',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (!_requestRecovery)
-                  TextField(
-                    contextMenuBuilder: buildTextSelectionToolbar,
-                    onTapOutside: dismissTextInput,
-                    key: const Key('input_auth_password'),
-                    controller: _passwordController,
-                    obscureText: true,
-                    style: const TextStyle(fontSize: 18),
-                    decoration: const InputDecoration(labelText: 'Contraseña'),
-                  ),
-                if (!_isRegisterMode && !_requestRecovery)
-                  TextButton(
-                    key: const Key('btn_forgot_password'),
-                    onPressed: _submitting
-                        ? null
-                        : () => setState(() {
-                            _requestRecovery = true;
-                            _recoveryEmailSent = false;
-                            _errorMessage = null;
-                          }),
-                    child: const Text('Olvidé mi contraseña'),
-                  ),
-                if (_requestRecovery) ...[
-                  const SizedBox(height: 12),
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      _recoveryEmailSent
-                          ? 'Si existe una cuenta con ese correo, recibirás un enlace para elegir una nueva contraseña. Revisa también el correo no deseado. Abre el enlace en este teléfono.'
-                          : 'Escribe el correo de tu cuenta. Te enviaremos un enlace para abrir la recuperación en esta app.',
+                  if (!_requestRecovery)
+                    TextField(
+                      contextMenuBuilder: buildTextSelectionToolbar,
+                      onTapOutside: dismissTextInput,
+                      key: const Key('input_auth_password'),
+                      controller: _passwordController,
+                      obscureText: true,
+                      style: const TextStyle(fontSize: 18),
+                      decoration: const InputDecoration(
+                        labelText: 'Contraseña',
+                      ),
+                    ),
+                  if (!_isRegisterMode && !_requestRecovery)
+                    TextButton(
+                      key: const Key('btn_forgot_password'),
+                      onPressed: _submitting
+                          ? null
+                          : () => setState(() {
+                              _requestRecovery = true;
+                              _recoveryEmailSent = false;
+                              _errorMessage = null;
+                            }),
+                      child: const Text('Olvidé mi contraseña'),
+                    ),
+                  if (_requestRecovery) ...[
+                    const SizedBox(height: 12),
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _recoveryEmailSent
+                            ? 'Si existe una cuenta con ese correo, recibirás un enlace para elegir una nueva contraseña. Revisa también el correo no deseado. Abre el enlace en este teléfono.'
+                            : 'Escribe el correo de tu cuenta. Te enviaremos un enlace para abrir la recuperación en esta app.',
+                      ),
+                    ),
+                    TextButton(
+                      key: const Key('btn_back_from_recovery_request'),
+                      onPressed: _submitting
+                          ? null
+                          : () => setState(() {
+                              _requestRecovery = false;
+                              _recoveryEmailSent = false;
+                              _errorMessage = null;
+                            }),
+                      child: const Text('Volver a iniciar sesión'),
+                    ),
+                  ],
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      _errorMessage!,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.urgentRed,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 58),
+                    child: ElevatedButton.icon(
+                      key: const Key('btn_submit_auth'),
+                      onPressed: _submitting || _recoveryEmailSent
+                          ? null
+                          : _handleAuthSubmit,
+                      icon: const Icon(Icons.login),
+                      label: Text(
+                        _submitting
+                            ? 'Conectando…'
+                            : _requestRecovery
+                            ? (_recoveryEmailSent
+                                  ? 'Correo solicitado'
+                                  : 'Enviar enlace de recuperación')
+                            : _isRegisterMode
+                            ? 'Registrarme y entrar al barrio'
+                            : 'Ingresar a mi cuenta',
+                      ),
                     ),
                   ),
-                  TextButton(
-                    key: const Key('btn_back_from_recovery_request'),
-                    onPressed: _submitting
-                        ? null
-                        : () => setState(() {
-                            _requestRecovery = false;
-                            _recoveryEmailSent = false;
-                            _errorMessage = null;
-                          }),
-                    child: const Text('Volver a iniciar sesión'),
-                  ),
                 ],
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.urgentRed,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 58),
-                  child: ElevatedButton.icon(
-                    key: const Key('btn_submit_auth'),
-                    onPressed: _submitting || _recoveryEmailSent
-                        ? null
-                        : _handleAuthSubmit,
-                    icon: const Icon(Icons.login),
-                    label: Text(
-                      _submitting
-                          ? 'Conectando…'
-                          : _requestRecovery
-                          ? (_recoveryEmailSent
-                                ? 'Correo solicitado'
-                                : 'Enviar enlace de recuperación')
-                          : _isRegisterMode
-                          ? 'Registrarme y entrar al barrio'
-                          : 'Ingresar a mi cuenta',
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

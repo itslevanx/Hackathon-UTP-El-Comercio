@@ -126,6 +126,31 @@ void main() {
       },
     );
 
+    testWidgets('Perfil muestra el formulario solo al cerrar sesión', (
+      tester,
+    ) async {
+      final controller = await _createInitializedTestController();
+      addTearDown(controller.dispose);
+      controller.navigateTo(AppSection.autenticacion);
+      await tester.pumpWidget(
+        NexoNeighborhoodApp(
+          appController: controller,
+          accessibilityController: AccessibilityController(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final email = find.byKey(const Key('input_auth_email'));
+      final signOut = find.byKey(const Key('btn_sign_out'));
+      expect(email, findsNothing);
+      expect(signOut, findsOneWidget);
+      await tester.tap(signOut);
+      await tester.pumpAndSettle();
+      controller.navigateTo(AppSection.autenticacion);
+      await tester.pumpAndSettle();
+      expect(email, findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets(
       'Tarea 3 (Publicar servicio o favor): Inicio -> Publicar servicio o favor (Clic 1) -> seleccionar tipo (Clic 2) -> escribir -> Publicar en mi barrio (Clic 3)',
       (WidgetTester tester) async {
