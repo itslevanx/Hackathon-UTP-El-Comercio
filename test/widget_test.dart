@@ -68,6 +68,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('btn_submit_publication')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('btn_submit_publication')));
         clickCount++;
         await tester.pumpAndSettle();
@@ -115,6 +116,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('btn_submit_publication')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('btn_submit_publication')));
         clickCount++;
         await tester.pumpAndSettle();
@@ -144,6 +146,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('btn_home_publicar_servicio_favor')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(
           find.byKey(const Key('btn_home_publicar_servicio_favor')),
         );
@@ -168,6 +171,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('btn_submit_publication')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('btn_submit_publication')));
         clickCount++;
         await tester.pumpAndSettle();
@@ -200,6 +204,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('btn_home_ver_favores')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('btn_home_ver_favores')));
         clickCount++;
         await tester.pumpAndSettle();
@@ -208,6 +213,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('card_favor_pub-demo-favor-carmen')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(
           find.byKey(const Key('card_favor_pub-demo-favor-carmen')),
         );
@@ -223,6 +229,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('btn_enviar_oferta_ayuda')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('btn_enviar_oferta_ayuda')));
         clickCount++;
         await tester.pumpAndSettle();
@@ -255,6 +262,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('btn_home_buscar_servicios')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('btn_home_buscar_servicios')));
         clickCount++;
         await tester.pumpAndSettle();
@@ -263,6 +271,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('card_service_pub-demo-servicio-elena')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(
           find.byKey(const Key('card_service_pub-demo-servicio-elena')),
         );
@@ -273,6 +282,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('btn_recomendar_servicio')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('btn_recomendar_servicio')));
         clickCount++;
         await tester.pumpAndSettle();
@@ -312,6 +322,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('btn_home_practicar_emergencia')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(
           find.byKey(const Key('btn_home_practicar_emergencia')),
         );
@@ -331,6 +342,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('card_scenario_lluvia')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('card_scenario_lluvia')));
         clickCount++;
         await tester.pumpAndSettle();
@@ -339,6 +351,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const Key('btn_iniciar_practica')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('btn_iniciar_practica')));
         clickCount++;
         await tester.pumpAndSettle();

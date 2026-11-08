@@ -147,6 +147,7 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const Key('btn_home_ofrecer_recurso')),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('btn_home_ofrecer_recurso')));
       await tester.pumpAndSettle();
       expect(
@@ -168,11 +169,13 @@ void main() {
       await tester.ensureVisible(
         find.byKey(const Key('checkbox_resource_consent')),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('checkbox_resource_consent')));
       await tester.pumpAndSettle();
       await tester.ensureVisible(
         find.byKey(const Key('btn_submit_publication')),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('btn_submit_publication')));
       await tester.pumpAndSettle();
       expect(controller.lastSubmittedPublication?.shareResourceConsent, isTrue);

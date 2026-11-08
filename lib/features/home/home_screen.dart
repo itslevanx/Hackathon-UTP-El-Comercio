@@ -1,3 +1,5 @@
+import '../publish/publication_owner_actions.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/models/domain_models.dart';
@@ -25,146 +27,252 @@ class _HomeScreenState extends State<HomeScreen> {
     final c = widget.controller;
     final pendingCount = c.userOutbox.length;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            c.currentUser == null
-                ? 'Tu barrio, más cerca'
-                : 'Hola, ${c.currentUser!.alias}',
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          if (!c.remoteGateway.isLiveSupabaseConnected &&
-              !c.remoteGateway.isTestDouble)
-            const Text(
-              'La conexión con el barrio está pendiente de configurar. Puedes usar las prácticas sin internet.',
-              style: TextStyle(fontSize: 16),
+    final feed = c.neighborhoodFeed;
+    return NotificationListener<ScrollNotification>(
+      onNotification: (event) {
+        if (event.metrics.extentAfter < 500) c.loadMoreFeed();
+        return false;
+      },
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    c.currentUser == null
+                        ? 'Tu barrio, más cerca'
+                        : 'Hola, ${c.currentUser!.alias}',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (!c.remoteGateway.isLiveSupabaseConnected &&
+                      !c.remoteGateway.isTestDouble)
+                    const Text(
+                      'La conexión con el barrio está pendiente de configurar. Puedes usar las prácticas sin internet.',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  const SizedBox(height: 12),
+                  // 1. Reportar emergencia (2 clics total: Inicio -> escribir -> Enviar reporte)
+                  _PrimaryCivicActionButton(
+                    buttonKey: const Key('btn_home_reportar_emergencia'),
+                    label: 'Reportar emergencia',
+                    subtitle: 'Aviso urgente a vecinos de tu sector (2 pasos)',
+                    icon: Icons.warning_amber_rounded,
+                    backgroundColor: AppTheme.urgentRed,
+                    foregroundColor: Colors.white,
+                    onTap: () => c.openQuickPublish(
+                      presetKind: PublicationKind.emergenciaSolicitud,
+                      lockTypeForTwoClickFlow: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 2. Necesito ayuda (2 clics total: Inicio -> escribir -> Enviar solicitud)
+                  _PrimaryCivicActionButton(
+                    buttonKey: const Key('btn_home_necesito_ayuda'),
+                    label: 'Necesito ayuda',
+                    subtitle: 'Pedir un favor solidario o préstamo gratuito (2 pasos)',
+                    icon: Icons.volunteer_activism,
+                    backgroundColor: AppTheme.actionGreen,
+                    foregroundColor: Colors.white,
+                    onTap: () => c.openQuickPublish(
+                      presetKind: PublicationKind.favorSolicitud,
+                      lockTypeForTwoClickFlow: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 3. Publicar servicio o favor (3 clics total: Inicio -> elegir tipo -> escribir -> Publicar en mi barrio)
+                  _PrimaryCivicActionButton(
+                    buttonKey: const Key('btn_home_publicar_servicio_favor'),
+                    label: 'Publicar servicio o favor',
+                    subtitle: 'Ofrecer tu oficio, prestar herramienta o ayudar (3 pasos)',
+                    icon: Icons.add_circle_outline,
+                    backgroundColor: AppTheme.surfaceCard,
+                    foregroundColor: AppTheme.textPrimary,
+                    borderColor: AppTheme.actionGreen,
+                    onTap: () => c.openQuickPublish(
+                      presetKind: PublicationKind.servicio,
+                      lockTypeForTwoClickFlow: false,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 4. Buscar servicios (3 clics total para contactar o recomendar)
+                  _PrimaryCivicActionButton(
+                    buttonKey: const Key('btn_home_buscar_servicios'),
+                    label: 'Buscar servicios',
+                    subtitle: 'Electricistas, costureras, gasfiteros y oficios cercanos',
+                    icon: Icons.search,
+                    backgroundColor: AppTheme.surfaceCard,
+                    foregroundColor: AppTheme.textPrimary,
+                    borderColor: AppTheme.borderSoft,
+                    onTap: () => c.navigateTo(AppSection.servicios),
+                  ),
+                  const SizedBox(height: 12),
+
+                  _PrimaryCivicActionButton(
+                    buttonKey: const Key('btn_home_explorar_mapa'),
+                    label: 'Explorar mapa',
+                    subtitle: 'Servicios, favores, recursos y avisos cercanos',
+                    icon: Icons.map_outlined,
+                    backgroundColor: AppTheme.surfaceCard,
+                    foregroundColor: AppTheme.textPrimary,
+                    borderColor: AppTheme.borderSoft,
+                    onTap: () => c.navigateTo(AppSection.explorarMapa),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 5. Ver favores y ayudar (3 clics total: Inicio -> abrir solicitud -> Enviar oferta de ayuda)
+                  _PrimaryCivicActionButton(
+                    buttonKey: const Key('btn_home_ver_favores'),
+                    label: 'Ver favores y ayudar',
+                    subtitle: 'Solicitudes gratuitas de vecinos que necesitan apoyo hoy',
+                    icon: Icons.handshake_outlined,
+                    backgroundColor: AppTheme.surfaceCard,
+                    foregroundColor: AppTheme.textPrimary,
+                    borderColor: AppTheme.borderSoft,
+                    onTap: () => c.navigateTo(AppSection.favores),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 6. Practicar una emergencia (Simulacro interactivo 100% offline)
+                  _PrimaryCivicActionButton(
+                    buttonKey: const Key('btn_home_practicar_emergencia'),
+                    label: 'Practicar una emergencia',
+                    subtitle: 'Simulacro guiado con datos ficticios sin riesgo ni internet',
+                    icon: Icons.school_outlined,
+                    backgroundColor: AppTheme.practiceBlue,
+                    foregroundColor: Colors.white,
+                    onTap: () => c.navigateTo(AppSection.practicaSimulacro),
+                  ),
+
+                  const SizedBox(height: 12),
+                  _PrimaryCivicActionButton(
+                    buttonKey: const Key('btn_home_ofrecer_recurso'),
+                    label: 'Ofrecer recurso para emergencia',
+                    subtitle: 'Con tu consentimiento explícito',
+                    icon: Icons.inventory_2_outlined,
+                    backgroundColor: AppTheme.surfaceCard,
+                    foregroundColor: AppTheme.textPrimary,
+                    borderColor: AppTheme.actionGreen,
+                    onTap: () => c.openQuickPublish(
+                      presetKind: PublicationKind.emergenciaOferta,
+                      lockTypeForTwoClickFlow: true,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  if (c.statusBannerMessage != null) _buildStatusBanner(c),
+                  if (c.showOnboardingTutorial) _buildTutorialCard(c),
+                  _buildWelcomeAndConnectionBar(context, c, pendingCount),
+                  const SizedBox(height: 12),
+                  _buildExpandableNeighborhoodResources(context, c),
+                  const SizedBox(height: 16),
+                  const OfficialEmergencyChannelsCard(),
+                ],
+              ),
             ),
-          const SizedBox(height: 12),
-          // 1. Reportar emergencia (2 clics total: Inicio -> escribir -> Enviar reporte)
-          _PrimaryCivicActionButton(
-            buttonKey: const Key('btn_home_reportar_emergencia'),
-            label: 'Reportar emergencia',
-            subtitle: 'Aviso urgente a vecinos de tu sector (2 pasos)',
-            icon: Icons.warning_amber_rounded,
-            backgroundColor: AppTheme.urgentRed,
-            foregroundColor: Colors.white,
-            onTap: () => c.openQuickPublish(
-              presetKind: PublicationKind.emergenciaSolicitud,
-              lockTypeForTwoClickFlow: true,
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Avisos del barrio',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    c.isOfflineMode
+                        ? 'Sin conexión: avisos guardados en este teléfono.'
+                        : 'Del más reciente al más antiguo.',
+                  ),
+                  if (c.isAuthenticated && c.activeDistrictUbigeo == null)
+                    const Text(
+                      'Elige un distrito en tu perfil para ver los avisos de esa zona.',
+                    ),
+                  if (!c.isAuthenticated)
+                    const Text(
+                      'Inicia sesión para ver los avisos de tus vecinos.',
+                    ),
+                  if (c.isAuthenticated && feed.isEmpty)
+                    const Text('Aún no hay avisos guardados para esta zona.'),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-
-          // 2. Necesito ayuda (2 clics total: Inicio -> escribir -> Enviar solicitud)
-          _PrimaryCivicActionButton(
-            buttonKey: const Key('btn_home_necesito_ayuda'),
-            label: 'Necesito ayuda',
-            subtitle: 'Pedir un favor solidario o préstamo gratuito (2 pasos)',
-            icon: Icons.volunteer_activism,
-            backgroundColor: AppTheme.actionGreen,
-            foregroundColor: Colors.white,
-            onTap: () => c.openQuickPublish(
-              presetKind: PublicationKind.favorSolicitud,
-              lockTypeForTwoClickFlow: true,
+          SliverList.builder(
+            itemCount: feed.length,
+            itemBuilder: (context, index) {
+              final p = feed[index];
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Card(
+                  key: ValueKey('home_feed_${p.id}'),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          p.authorAlias,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        Text(
+                          '${p.kind.shortBadge} · ${p.createdAt.toLocal().toString().substring(0, 16)}',
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          p.title,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          p.description,
+                          style: const TextStyle(fontSize: 18, height: 1.4),
+                        ),
+                        const SizedBox(height: 8),
+                        Text('${p.neighborhood} · ${p.sector}'),
+                        PublicationStatusBadge(status: p.status),
+                        PublicationOwnerActions(controller: c, publication: p),
+                        OutlinedButton(
+                          onPressed: () => p.kind.isService
+                              ? c.openServiceDetail(p)
+                              : c.openFavorDetail(p),
+                          child: const Text('Ver aviso'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+              child: c.feedLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : c.isAuthenticated && c.feedHasMore && !c.isOfflineMode
+                  ? OutlinedButton(
+                      onPressed: () => c.loadMoreFeed(),
+                      child: const Text('Cargar más avisos'),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ),
-          const SizedBox(height: 12),
-
-          // 3. Publicar servicio o favor (3 clics total: Inicio -> elegir tipo -> escribir -> Publicar en mi barrio)
-          _PrimaryCivicActionButton(
-            buttonKey: const Key('btn_home_publicar_servicio_favor'),
-            label: 'Publicar servicio o favor',
-            subtitle:
-                'Ofrecer tu oficio, prestar herramienta o ayudar (3 pasos)',
-            icon: Icons.add_circle_outline,
-            backgroundColor: AppTheme.surfaceCard,
-            foregroundColor: AppTheme.textPrimary,
-            borderColor: AppTheme.actionGreen,
-            onTap: () => c.openQuickPublish(
-              presetKind: PublicationKind.servicio,
-              lockTypeForTwoClickFlow: false,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // 4. Buscar servicios (3 clics total para contactar o recomendar)
-          _PrimaryCivicActionButton(
-            buttonKey: const Key('btn_home_buscar_servicios'),
-            label: 'Buscar servicios',
-            subtitle:
-                'Electricistas, costureras, gasfiteros y oficios cercanos',
-            icon: Icons.search,
-            backgroundColor: AppTheme.surfaceCard,
-            foregroundColor: AppTheme.textPrimary,
-            borderColor: AppTheme.borderSoft,
-            onTap: () => c.navigateTo(AppSection.servicios),
-          ),
-          const SizedBox(height: 12),
-
-          _PrimaryCivicActionButton(
-            buttonKey: const Key('btn_home_explorar_mapa'),
-            label: 'Explorar mapa',
-            subtitle: 'Servicios, favores, recursos y avisos cercanos',
-            icon: Icons.map_outlined,
-            backgroundColor: AppTheme.surfaceCard,
-            foregroundColor: AppTheme.textPrimary,
-            borderColor: AppTheme.borderSoft,
-            onTap: () => c.navigateTo(AppSection.explorarMapa),
-          ),
-          const SizedBox(height: 12),
-
-          // 5. Ver favores y ayudar (3 clics total: Inicio -> abrir solicitud -> Enviar oferta de ayuda)
-          _PrimaryCivicActionButton(
-            buttonKey: const Key('btn_home_ver_favores'),
-            label: 'Ver favores y ayudar',
-            subtitle:
-                'Solicitudes gratuitas de vecinos que necesitan apoyo hoy',
-            icon: Icons.handshake_outlined,
-            backgroundColor: AppTheme.surfaceCard,
-            foregroundColor: AppTheme.textPrimary,
-            borderColor: AppTheme.borderSoft,
-            onTap: () => c.navigateTo(AppSection.favores),
-          ),
-          const SizedBox(height: 12),
-
-          // 6. Practicar una emergencia (Simulacro interactivo 100% offline)
-          _PrimaryCivicActionButton(
-            buttonKey: const Key('btn_home_practicar_emergencia'),
-            label: 'Practicar una emergencia',
-            subtitle:
-                'Simulacro guiado con datos ficticios sin riesgo ni internet',
-            icon: Icons.school_outlined,
-            backgroundColor: AppTheme.practiceBlue,
-            foregroundColor: Colors.white,
-            onTap: () => c.navigateTo(AppSection.practicaSimulacro),
-          ),
-
-          const SizedBox(height: 12),
-          _PrimaryCivicActionButton(
-            buttonKey: const Key('btn_home_ofrecer_recurso'),
-            label: 'Ofrecer recurso para emergencia',
-            subtitle: 'Con tu consentimiento explícito',
-            icon: Icons.inventory_2_outlined,
-            backgroundColor: AppTheme.surfaceCard,
-            foregroundColor: AppTheme.textPrimary,
-            borderColor: AppTheme.actionGreen,
-            onTap: () => c.openQuickPublish(
-              presetKind: PublicationKind.emergenciaOferta,
-              lockTypeForTwoClickFlow: true,
-            ),
-          ),
-          const SizedBox(height: 18),
-          if (c.statusBannerMessage != null) _buildStatusBanner(c),
-          if (c.showOnboardingTutorial) _buildTutorialCard(c),
-          _buildWelcomeAndConnectionBar(context, c, pendingCount),
-          const SizedBox(height: 12),
-          _buildExpandableNeighborhoodResources(context, c),
-          const SizedBox(height: 16),
-          const OfficialEmergencyChannelsCard(),
         ],
       ),
     );

@@ -19,6 +19,7 @@ dependencies:
   geocoding: ^5.0.1
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
+  connectivity_plus: 7.3.1
   http: ^1.6.0
 
 dev_dependencies:

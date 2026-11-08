@@ -16,6 +16,7 @@ import 'package:hackathon_utp_el_comercio/core/maps/carto_tile_cache.dart';
 import 'package:hackathon_utp_el_comercio/core/state/app_controller.dart';
 import 'package:hackathon_utp_el_comercio/core/sync/outbox_sync_service.dart';
 import 'package:hackathon_utp_el_comercio/core/sync/supabase_remote_gateway.dart';
+import 'package:hackathon_utp_el_comercio/features/home/home_screen.dart';
 import 'package:hackathon_utp_el_comercio/features/publish/publication_owner_actions.dart';
 
 Future<AppController> app({SupabaseRemoteGateway? gateway}) async {
@@ -152,6 +153,28 @@ void main() {
       expect((await c.database.listOutboxForUser(c.currentUser!.id)).length, 2);
     },
   );
+  test(
+    'Feed pagina por fecha e id y conserva sus páginas al desconectarse',
+    () async {
+      final gateway = _FeedGateway();
+      final c = await app(gateway: gateway);
+      addTearDown(c.dispose);
+      await c.loadMoreFeed();
+      await c.loadMoreFeed();
+      expect(gateway.cursors, [null, 'feed-29']);
+      expect(
+        c.neighborhoodFeed.where((p) => p.id.startsWith('feed-')).length,
+        31,
+      );
+      gateway.simulateNetworkOffline = true;
+      await c.loadMoreFeed();
+      expect(gateway.cursors.length, 2);
+      expect(
+        c.neighborhoodFeed.where((p) => p.id.startsWith('feed-')).length,
+        31,
+      );
+    },
+  );
   test('SQLite 3 migra a 4 sin perder avisos y conserva la eliminación pendiente al reabrir', () async {
     ffi.sqfliteFfiInit();
     ffi.databaseFactory = ffi.databaseFactoryFfi;
@@ -214,6 +237,46 @@ void main() {
     );
     await engine.close();
     await dir.delete(recursive: true);
+  });
+  testWidgets('Feed conserva avisos offline y permite editar desde Inicio', (
+    tester,
+  ) async {
+    final c = await app();
+    addTearDown(c.dispose);
+    final p = await create(c, PublicationKind.anuncio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: HomeScreen(controller: c)),
+      ),
+    );
+    final card = find.byKey(ValueKey('home_feed_${p.id}'));
+    await tester.scrollUntilVisible(card, 500);
+    await tester.pumpAndSettle();
+    expect(card, findsOneWidget);
+    expect(
+      find.descendant(of: card, matching: find.text('Descripción de prueba')),
+      findsOneWidget,
+    );
+    final edit = find.byKey(ValueKey('edit_publication_${p.id}'));
+    await tester.ensureVisible(edit);
+    await tester.pumpAndSettle();
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('edit_publication_title')),
+      'Anuncio actualizado',
+    );
+    final save = find.byKey(const Key('save_publication_edit'));
+    await tester.ensureVisible(save);
+    await tester.pumpAndSettle();
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(
+      c.publications.singleWhere((v) => v.id == p.id).title,
+      'Anuncio actualizado',
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
   testWidgets('Eliminar pide confirmación; cancelar conserva el aviso', (
     tester,
@@ -343,5 +406,45 @@ class _BlockedGateway extends SupabaseRemoteGateway {
     }
     calls.add(op.entityType);
     return const RemoteSyncResult(status: SyncStatus.conflicto);
+  }
+}
+
+class _FeedGateway extends SupabaseRemoteGateway {
+  _FeedGateway() : super(forceSupabaseAvailable: false);
+  final cursors = <String?>[];
+  @override
+  Future<List<Publication>> fetchFeedPage({
+    String? districtUbigeo,
+    DateTime? beforeTime,
+    String? beforeId,
+    int limit = 30,
+  }) async {
+    cursors.add(beforeId);
+    final start = beforeId == null ? 0 : 30;
+    final count = start == 0 ? 30 : 1;
+    return List.generate(
+      count,
+      (n) => Publication(
+        id: 'feed-${start + n}',
+        clientMutationId: 'feed-op-${start + n}',
+        ownerUserId: 'other',
+        authorId: 'other',
+        authorAlias: 'Vecino',
+        kind: PublicationKind.anuncio,
+        category: 'general',
+        title: 'Aviso de página',
+        description: 'Prueba',
+        neighborhood: 'Pueblo Libre',
+        sector: 'Zona',
+        approxLat: -12.076,
+        approxLng: -77.063,
+        createdAt: DateTime.utc(
+          2026,
+          11,
+          7,
+        ).subtract(Duration(minutes: start + n)),
+        updatedAt: DateTime.utc(2026, 11, 7),
+      ),
+    );
   }
 }
