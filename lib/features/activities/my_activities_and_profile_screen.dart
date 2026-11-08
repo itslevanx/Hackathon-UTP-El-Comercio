@@ -4,6 +4,7 @@ import '../../core/models/domain_models.dart';
 import '../../core/state/app_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../shared/civic_widgets.dart';
+import '../publish/publication_owner_actions.dart';
 
 /// Pantalla "Mis actividades, borradores y envíos pendientes":
 /// - Muestra publicaciones propias y permite cambiar su estado (`abierta` ->
@@ -124,7 +125,7 @@ class _MyActivitiesAndProfileScreenState
                       icon: const Icon(Icons.manage_accounts_outlined),
                       label: Text(
                         user != null
-                            ? 'Cambiar cuenta / Zona / Cerrar sesión'
+                            ? 'Zona y sesión'
                             : 'Iniciar sesión o registrarse',
                       ),
                     ),
@@ -133,7 +134,7 @@ class _MyActivitiesAndProfileScreenState
                       onPressed: () => c.navigateTo(AppSection.chatLista),
                       icon: const Icon(Icons.chat_outlined),
                       label: Text(
-                        'Mis conversaciones (${c.userConversations.length})',
+                        'Mis chats (${c.userConversations.length + c.emergencyGroupChats.length})',
                       ),
                     ),
                   ],
@@ -365,6 +366,11 @@ class _MyActivitiesAndProfileScreenState
                                 fontSize: 16,
                                 color: AppTheme.textSecondary,
                               ),
+                            ),
+                            const SizedBox(height: 8),
+                            PublicationOwnerActions(
+                              controller: c,
+                              publication: pub,
                             ),
                             if (pub.status.allowedNextStatuses.isNotEmpty) ...[
                               const SizedBox(height: 10),
