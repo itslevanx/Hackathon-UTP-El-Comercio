@@ -264,7 +264,7 @@ Sin conexión se muestran exclusivamente consultas guardadas, con su fecha y adv
 
 La migración incremental `supabase/migrations/20261108210000_community_intelligence.sql` añade dos índices y tres funciones: `community_resource_family`, `community_risk_snapshot` y `community_help_candidates`. Las RPC son `SECURITY INVOKER`, tienen `search_path` vacío y solo permiten ejecución autenticada. No amplían RLS, no publican perfiles privados y no requieren claves de servicio. Las coordenadas de concentraciones se redondean a tres decimales. No se añade una tabla de verificación ni un sistema de bloqueo: cualquier futura política restrictiva sobre publicaciones se aplica también a estas consultas.
 
-**Despliegue pendiente:** revisar y aplicar esa migración en el entorno de Supabase elegido antes de probar las RPC desde la app. La implementación no aplica cambios al proyecto de producción automáticamente. No hay configuración adicional de CARTO ni nuevas dependencias.
+La migración comunitaria se activó en el proyecto actual el 8 de noviembre de 2026. Se comprobó la solicitud real de agua con una donación temporal bajo el rol autenticado; la cuenta y la oferta de prueba se revirtieron. En otros entornos hay que revisar y aplicar la migración antes de consultar las RPC. No hay configuración adicional de CARTO ni nuevas dependencias.
 
 ### Verificación de estos módulos
 
@@ -282,3 +282,5 @@ Para validar en Android e iOS, usar un entorno de pruebas con tres cuentas disti
 Capacidad del proyecto remoto comprobada en lectura: PostgreSQL 17.11, PostGIS 3.3.7 y `ST_ClusterDBSCAN` disponible en `extensions`. Las verificaciones SQL se ejecutaron en una base local aislada con PostgreSQL 17.5 y PostGIS 3.5.2; no equivalen a una prueba de despliegue en producción. La implementación usa una función [disponible desde PostGIS 2.3](https://postgis.net/docs/ST_ClusterDBSCAN.html), con orden explícito para asignaciones de borde reproducibles.
 
 Validación de esta entrega: 111 pruebas Flutter aprobadas, `flutter analyze` sin incidencias, nueve scripts SQL aprobados en la base local e iOS Simulator compilado sin firma. Android no se compiló porque este entorno no tiene Android SDK ni Java Runtime. No se instalaron estos cambios en dispositivos físicos.
+
+El panel de riesgos del mapa es desplegable para dar prioridad al mapa y a los avisos. Los mensajes de conexión se mantienen breves; el detalle conserva el contexto de cada concentración.
