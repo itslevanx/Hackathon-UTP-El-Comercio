@@ -8,6 +8,7 @@ import '../../core/geography/peru_location_catalog.dart';
 import '../shared/peru_location_selector.dart';
 import '../../core/state/app_controller.dart';
 import '../../core/theme/app_theme.dart';
+import 'auth_error_message.dart';
 
 /// Pantalla de registro, inicio de sesión, cambio de cuenta, cierre de sesión
 /// y configuración de zona manual / ubicación opcional por GPS.
@@ -28,6 +29,9 @@ class AuthAndOnboardingScreen extends StatefulWidget {
 
 class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
   bool _isRegisterMode = false;
+  bool _submitting = false;
+  bool _requestRecovery = false;
+  bool _recoveryEmailSent = false;
 
   final TextEditingController _aliasController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -158,9 +162,17 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
 
   Future<void> _handleAuthSubmit() async {
     FocusScope.of(context).unfocus();
-    setState(() => _errorMessage = null);
+    if (_submitting) return;
+    setState(() {
+      _errorMessage = null;
+      _submitting = true;
+    });
     try {
-      if (_isRegisterMode) {
+      if (_requestRecovery) {
+        if (_recoveryEmailSent) return;
+        await widget.controller.requestPasswordReset(_emailController.text);
+        if (mounted) setState(() => _recoveryEmailSent = true);
+      } else if (_isRegisterMode) {
         if (!(_locationKey.currentState?.validate() ?? false)) return;
         final zone = _formLocation();
         await widget.controller.registerAndSignIn(
@@ -183,9 +195,11 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString().replaceFirst('Bad state: ', '');
+          _errorMessage = authErrorMessage(e);
         });
       }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -209,10 +223,7 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
       );
     } catch (error) {
       if (mounted) {
-        setState(
-          () =>
-              _errorMessage = error.toString().replaceFirst('Bad state: ', ''),
-        );
+        setState(() => _errorMessage = authErrorMessage(error));
       }
     }
   }
@@ -229,6 +240,14 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (c.statusBannerMessage != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Semantics(
+                liveRegion: true,
+                child: Text(c.statusBannerMessage!),
+              ),
+            ),
           if (pendingIntent != null) ...[
             Container(
               key: const Key('banner_pending_auth_intent'),
@@ -438,29 +457,47 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: ChoiceChip(
-                        key: const Key('tab_login_mode'),
-                        label: const Text('Iniciar sesión'),
-                        selected: !_isRegisterMode,
-                        onSelected: (_) =>
-                            setState(() => _isRegisterMode = false),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ChoiceChip(
-                        key: const Key('tab_register_mode'),
-                        label: const Text('Crear cuenta vecinal'),
-                        selected: _isRegisterMode,
-                        onSelected: (_) =>
-                            setState(() => _isRegisterMode = true),
-                      ),
-                    ),
-                  ],
-                ),
+                if (_requestRecovery)
+                  Text(
+                    'Recuperar contraseña',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  )
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final mode in [false, true])
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Semantics(
+                            selected: _isRegisterMode == mode,
+                            child: OutlinedButton(
+                              key: Key(
+                                mode ? 'tab_register_mode' : 'tab_login_mode',
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: _isRegisterMode == mode
+                                    ? const Color(0xFFC8F5DF)
+                                    : AppTheme.surfaceCard,
+                                minimumSize: const Size(0, 56),
+                              ),
+                              onPressed: _submitting
+                                  ? null
+                                  : () => setState(() {
+                                      _isRegisterMode = mode;
+                                      _errorMessage = null;
+                                    }),
+                              child: Text(
+                                mode
+                                    ? 'Crear cuenta vecinal'
+                                    : 'Iniciar sesión',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 const SizedBox(height: 14),
                 if (_isRegisterMode) ...[
                   TextField(
@@ -488,15 +525,50 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  contextMenuBuilder: buildTextSelectionToolbar,
-                  onTapOutside: dismissTextInput,
-                  key: const Key('input_auth_password'),
-                  controller: _passwordController,
-                  obscureText: true,
-                  style: const TextStyle(fontSize: 18),
-                  decoration: const InputDecoration(labelText: 'Contraseña'),
-                ),
+                if (!_requestRecovery)
+                  TextField(
+                    contextMenuBuilder: buildTextSelectionToolbar,
+                    onTapOutside: dismissTextInput,
+                    key: const Key('input_auth_password'),
+                    controller: _passwordController,
+                    obscureText: true,
+                    style: const TextStyle(fontSize: 18),
+                    decoration: const InputDecoration(labelText: 'Contraseña'),
+                  ),
+                if (!_isRegisterMode && !_requestRecovery)
+                  TextButton(
+                    key: const Key('btn_forgot_password'),
+                    onPressed: _submitting
+                        ? null
+                        : () => setState(() {
+                            _requestRecovery = true;
+                            _recoveryEmailSent = false;
+                            _errorMessage = null;
+                          }),
+                    child: const Text('Olvidé mi contraseña'),
+                  ),
+                if (_requestRecovery) ...[
+                  const SizedBox(height: 12),
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      _recoveryEmailSent
+                          ? 'Si existe una cuenta con ese correo, recibirás un enlace para elegir una nueva contraseña. Revisa también el correo no deseado. Abre el enlace en este teléfono.'
+                          : 'Escribe el correo de tu cuenta. Te enviaremos un enlace para abrir la recuperación en esta app.',
+                    ),
+                  ),
+                  TextButton(
+                    key: const Key('btn_back_from_recovery_request'),
+                    onPressed: _submitting
+                        ? null
+                        : () => setState(() {
+                            _requestRecovery = false;
+                            _recoveryEmailSent = false;
+                            _errorMessage = null;
+                          }),
+                    child: const Text('Volver a iniciar sesión'),
+                  ),
+                ],
                 if (_errorMessage != null) ...[
                   const SizedBox(height: 10),
                   Text(
@@ -513,10 +585,18 @@ class _AuthAndOnboardingScreenState extends State<AuthAndOnboardingScreen> {
                   constraints: const BoxConstraints(minHeight: 58),
                   child: ElevatedButton.icon(
                     key: const Key('btn_submit_auth'),
-                    onPressed: _handleAuthSubmit,
+                    onPressed: _submitting || _recoveryEmailSent
+                        ? null
+                        : _handleAuthSubmit,
                     icon: const Icon(Icons.login),
                     label: Text(
-                      _isRegisterMode
+                      _submitting
+                          ? 'Conectando…'
+                          : _requestRecovery
+                          ? (_recoveryEmailSent
+                                ? 'Correo solicitado'
+                                : 'Enviar enlace de recuperación')
+                          : _isRegisterMode
                           ? 'Registrarme y entrar al barrio'
                           : 'Ingresar a mi cuenta',
                     ),

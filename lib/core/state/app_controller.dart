@@ -48,6 +48,9 @@ enum AppSection {
 class AppController extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _syncTimer;
   StreamSubscription<void>? _authSubscription;
+  StreamSubscription<void>? _recoverySubscription;
+  bool _passwordRecoveryPending = false;
+  bool get passwordRecoveryPending => _passwordRecoveryPending;
   bool _authActionInProgress = false;
   bool _restoringAuthSession = false;
   int _authEpoch = 0;
@@ -220,6 +223,22 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       },
     );
+    _recoverySubscription = remoteGateway.passwordRecoveryChanges.listen(
+      (_) {
+        if (_disposed || !remoteGateway.hasPasswordRecoverySession) return;
+        _authEpoch++;
+        _passwordRecoveryPending = true;
+        _currentUser = null;
+        _selectedConversation = null;
+        _selectedPublication = null;
+        notifyListeners();
+      },
+      onError: (Object error) {
+        if (_disposed) return;
+        _statusBannerMessage = 'El enlace no es válido o venció. Solicita otro correo de recuperación.';
+        notifyListeners();
+      },
+    );
     if (remoteGateway.isLiveSupabaseConnected && !remoteGateway.isTestDouble) {
       if (startWithActiveSession && _currentUser == null) {
         unawaited(_restoreSessionFromLink());
@@ -282,7 +301,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _restoreSessionFromLink() async {
-    if (_disposed || _restoringAuthSession || _authActionInProgress) return;
+    if (_disposed ||
+        _restoringAuthSession ||
+        _authActionInProgress ||
+        _passwordRecoveryPending) {
+      return;
+    }
     _restoringAuthSession = true;
     final epoch = _authEpoch;
     try {
@@ -329,6 +353,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _disposed = true;
     _syncTimer?.cancel();
     unawaited(_authSubscription?.cancel());
+    unawaited(_recoverySubscription?.cancel());
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -1008,7 +1033,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
     _authActionInProgress = true;
-    _authEpoch++;
+    final authEpoch = ++_authEpoch;
     try {
       final profile = await remoteGateway.registerAccount(
         alias: alias,
@@ -1021,6 +1046,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         useGpsApprox: useGpsApprox,
         districtUbigeo: districtUbigeo,
       );
+      if (_disposed || authEpoch != _authEpoch || _passwordRecoveryPending) {
+        throw StateError('La sesión cambió. Vuelve a intentarlo.');
+      }
       _currentUser = profile;
       await database.saveUserProfile(profile, queueSync: true);
       await outboxSyncService.syncPendingForUser(profile.id);
@@ -1035,13 +1063,16 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// Inicio de sesión y reanudación automática de intención pendiente.
   Future<void> signIn({required String email, required String password}) async {
     _authActionInProgress = true;
-    _authEpoch++;
+    final authEpoch = ++_authEpoch;
     try {
       final remoteProfile = await remoteGateway.signInAccount(
         email: email,
         password: password,
       );
       final profile = await _preferPendingLocalProfile(remoteProfile);
+      if (_disposed || authEpoch != _authEpoch || _passwordRecoveryPending) {
+        throw StateError('La sesión cambió. Vuelve a intentarlo.');
+      }
       _currentUser = profile;
       await database.saveUserProfile(profile, queueSync: false);
       await refreshAllLocalData();
@@ -1059,6 +1090,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _authEpoch++;
     final previousId = _currentUser?.id;
     await remoteGateway.signOutAccount();
+    _passwordRecoveryPending = false;
     if (previousId != null) {
       await database.clearPrivateCacheOnSignOut(previousId);
     }
@@ -1066,6 +1098,34 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _selectedConversation = null;
     await refreshAllLocalData();
     goHome();
+  }
+
+  Future<void> requestPasswordReset(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(cleanEmail)) {
+      throw StateError('Ingresa un correo electrónico válido.');
+    }
+    await remoteGateway.requestPasswordReset(cleanEmail);
+  }
+
+  Future<void> completePasswordRecovery(String password) async {
+    if (!_passwordRecoveryPending ||
+        !remoteGateway.hasPasswordRecoverySession) {
+      throw StateError(
+        'Abre un enlace de recuperación válido para cambiar tu contraseña.',
+      );
+    }
+    if (password.length < 8) {
+      throw StateError('La nueva contraseña debe tener al menos 8 caracteres.');
+    }
+    final epoch = _authEpoch;
+    await remoteGateway.updateRecoveredPassword(password);
+    if (_disposed || epoch != _authEpoch) return;
+    _passwordRecoveryPending = false;
+    await _restoreSessionFromLink();
+    if (_disposed || epoch != _authEpoch) return;
+    _statusBannerMessage = 'Contraseña actualizada.';
+    notifyListeners();
   }
 
   /// Actualiza la zona manual o preferencia de GPS aproximado sin bloquear al

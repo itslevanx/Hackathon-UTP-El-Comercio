@@ -152,6 +152,45 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
         .map((_) {});
   }
 
+  String? _recoveryUserId;
+  Stream<void> get passwordRecoveryChanges {
+    if (isTestDouble || !isLiveSupabaseConnected) return const Stream.empty();
+    return _client.auth.onAuthStateChange
+        .where(
+          (state) =>
+              state.event == AuthChangeEvent.passwordRecovery &&
+              state.session != null,
+        )
+        .map((state) {
+          _recoveryUserId = state.session!.user.id;
+        });
+  }
+
+  bool get hasPasswordRecoverySession =>
+      isLiveSupabaseConnected &&
+      _recoveryUserId != null &&
+      _client.auth.currentUser?.id == _recoveryUserId &&
+      _client.auth.currentSession != null;
+
+  Future<void> requestPasswordReset(String email) async {
+    _requireRealBackend();
+    await _client.auth.resetPasswordForEmail(
+      email,
+      redirectTo: AppConfig.authRedirectUrl,
+    );
+  }
+
+  Future<void> updateRecoveredPassword(String password) async {
+    _requireRealBackend();
+    if (!hasPasswordRecoverySession) {
+      throw StateError(
+        'Abre un enlace de recuperación válido para cambiar tu contraseña.',
+      );
+    }
+    await _client.auth.updateUser(UserAttributes(password: password));
+    _recoveryUserId = null;
+  }
+
   @override
   Future<UserProfile?> getCurrentSessionProfile() async {
     lastProfileFetchWasOffline = false;
@@ -392,6 +431,7 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
   @override
   Future<void> signOutAccount() async {
     _activeLocalSession = null;
+    _recoveryUserId = null;
     if (isLiveSupabaseConnected) {
       await _client.auth.signOut(scope: SignOutScope.local);
     }

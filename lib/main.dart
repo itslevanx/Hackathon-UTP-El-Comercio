@@ -11,6 +11,7 @@ import 'core/sync/supabase_remote_gateway.dart';
 import 'core/theme/app_theme.dart';
 import 'features/activities/my_activities_and_profile_screen.dart';
 import 'features/auth/auth_and_onboarding_screen.dart';
+import 'features/auth/password_recovery_screen.dart';
 import 'features/chat/chat_screens.dart';
 import 'features/emergencies/emergency_hub_screen.dart';
 import 'features/favors/favor_detail_screen.dart';
@@ -129,6 +130,20 @@ class _MainCivicShell extends StatelessWidget {
     final section = controller.currentSection;
     final showBack = section != AppSection.inicio;
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+    if (controller.passwordRecoveryPending) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Recuperar contraseña'),
+          automaticallyImplyLeading: false,
+        ),
+        body: SafeArea(
+          child: KeyboardDismissibleBody(
+            keyboardVisible: keyboardVisible,
+            child: PasswordRecoveryScreen(controller: controller),
+          ),
+        ),
+      );
+    }
     if (section == AppSection.practicaSimulacro) {
       return Scaffold(
         body: SafeArea(
