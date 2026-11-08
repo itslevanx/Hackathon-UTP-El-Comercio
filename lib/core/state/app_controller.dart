@@ -8,6 +8,7 @@ import '../geography/peru_location_catalog.dart';
 import '../maps/chosen_map_location.dart';
 import '../maps/carto_basemap.dart';
 import '../models/entity_id.dart';
+import '../models/emergency_group_message.dart';
 import '../database/local_sqlite_database.dart';
 import '../models/domain_models.dart';
 import '../sync/outbox_sync_service.dart';
@@ -43,6 +44,7 @@ enum AppSection {
   explorarMapa,
   chatLista,
   chatConversacion,
+  chatEmergencia,
   misActividades,
   autenticacion,
   practicaSimulacro,
@@ -171,6 +173,28 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   Publication? _selectedPublication;
   Publication? get selectedPublication => _selectedPublication;
 
+  Publication? _selectedEmergencyGroup;
+  Publication? get selectedEmergencyGroup => _publications
+      .where((p) => p.id == _selectedEmergencyGroup?.id)
+      .firstOrNull;
+  Set<String> _visitedEmergencyGroups = {};
+  List<Publication> get emergencyGroupChats => publications
+      .where(
+        (p) =>
+            _visitedEmergencyGroups.contains(p.id) && canViewEmergencyGroup(p),
+      )
+      .toList();
+  bool canViewEmergencyGroup(Publication publication) {
+    final p = publications.where((p) => p.id == publication.id).firstOrNull;
+    return currentUser != null &&
+        p != null &&
+        p.kind.isEmergency &&
+        !p.isDeleted &&
+        (p.authorId == currentUser!.id ||
+            (p.districtUbigeo != null &&
+                p.districtUbigeo == currentUser!.districtUbigeo));
+  }
+
   ConversationThread? _selectedConversation;
   ConversationThread? get selectedConversation => _selectedConversation;
 
@@ -261,6 +285,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         _passwordRecoveryPending = true;
         _currentUser = null;
         _selectedConversation = null;
+        _selectedEmergencyGroup = null;
         _selectedPublication = null;
         notifyListeners();
       },
@@ -424,6 +449,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       }
       if (_disposed || epoch != _authEpoch) return;
       _selectedConversation = null;
+      _selectedEmergencyGroup = null;
       _currentUser = profile;
       await database.saveUserProfile(profile, queueSync: false);
       if (_disposed || epoch != _authEpoch) return;
@@ -480,6 +506,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     );
     _lastSyncTimestamp = await database.getLastSyncTimestamp();
 
+    _visitedEmergencyGroups = _currentUser == null
+        ? {}
+        : await database.visitedEmergencyGroups(activeId);
     _userOutbox = await database.listOutboxForUser(activeId);
     _userDrafts = await database.listDraftsForUser(activeId);
     _userConversations = _currentUser == null
@@ -995,6 +1024,80 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     await refreshAllLocalData();
   }
 
+  Future<void> openEmergencyGroup(Publication publication) async {
+    await refreshAllLocalData();
+    if (!canViewEmergencyGroup(publication)) {
+      throw StateError(
+        'Inicia sesión y elige el distrito de esta emergencia en tu perfil.',
+      );
+    }
+    final uid = currentUser!.id;
+    await database.markEmergencyGroupVisited(uid, publication.id);
+    if (currentUser?.id != uid) return;
+    _selectedEmergencyGroup = publication;
+    await refreshAllLocalData();
+    if (currentUser?.id != uid) return;
+    _visitedEmergencyGroups.add(publication.id);
+    navigateTo(AppSection.chatEmergencia);
+  }
+
+  Future<List<EmergencyGroupMessage>> emergencyGroupHistory(
+    Publication publication,
+  ) async {
+    if (!canViewEmergencyGroup(publication)) return const [];
+    return database.listEmergencyGroupMessages(currentUser!.id, publication.id);
+  }
+
+  Future<List<EmergencyGroupMessage>> refreshEmergencyGroup(
+    Publication publication, {
+    EmergencyGroupMessage? before,
+  }) async {
+    if (!canViewEmergencyGroup(publication)) {
+      throw StateError('No tienes acceso a este grupo.');
+    }
+    final uid = currentUser!.id;
+    final remote = await remoteGateway
+        .fetchEmergencyGroupMessages(
+          publication.id,
+          beforeTime: before?.createdAt,
+          beforeId: before?.id,
+        )
+        .timeout(const Duration(seconds: 15));
+    if (currentUser?.id != uid || !canViewEmergencyGroup(publication)) {
+      return const [];
+    }
+    await database.mergeEmergencyGroupMessages(uid, remote);
+    return remote;
+  }
+
+  Future<void> sendEmergencyGroupMessage(
+    Publication publication,
+    String body,
+  ) async {
+    if (!canViewEmergencyGroup(publication)) {
+      throw StateError('No tienes acceso a este grupo.');
+    }
+    final current = publications
+        .where((p) => p.id == publication.id)
+        .firstOrNull;
+    if (current == null ||
+        current.status == PublicationStatus.resuelta ||
+        current.status == PublicationStatus.cancelada) {
+      throw StateError(
+        'Esta emergencia está cerrada. Puedes consultar la conversación.',
+      );
+    }
+    final uid = currentUser!.id;
+    await database.saveEmergencyGroupMessage(
+      owner: uid,
+      publicationId: publication.id,
+      senderAlias: currentUser!.alias,
+      body: body,
+    );
+    await outboxSyncService.syncPendingForUser(uid);
+    if (currentUser?.id == uid) await refreshAllLocalData();
+  }
+
   void openConversation(ConversationThread thread) {
     _selectedConversation = thread;
     navigateTo(AppSection.chatConversacion);
@@ -1359,6 +1462,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     }
     _currentUser = null;
     _selectedConversation = null;
+    _selectedEmergencyGroup = null;
     await refreshAllLocalData();
     goHome();
   }

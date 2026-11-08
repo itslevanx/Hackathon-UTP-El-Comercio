@@ -13,6 +13,7 @@ import 'features/activities/my_activities_and_profile_screen.dart';
 import 'features/auth/auth_and_onboarding_screen.dart';
 import 'features/auth/password_recovery_screen.dart';
 import 'features/chat/chat_screens.dart';
+import 'features/chat/emergency_group_chat_screen.dart';
 import 'features/emergencies/emergency_hub_screen.dart';
 import 'features/favors/favor_detail_screen.dart';
 import 'features/favors/favors_screen.dart';
@@ -199,6 +200,8 @@ class _MainCivicShell extends StatelessWidget {
         return ExploreMapScreen(controller: controller);
       case AppSection.emergencias:
         return EmergencyHubScreen(controller: controller);
+      case AppSection.chatEmergencia:
+        return EmergencyGroupChatScreen(controller: controller);
       case AppSection.chatLista:
         return ChatListScreen(controller: controller);
       case AppSection.chatConversacion:

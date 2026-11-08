@@ -9,9 +9,7 @@ import '../../core/state/app_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../shared/civic_widgets.dart';
 
-/// Listado de conversaciones privadas contextuales del vecino autenticado.
-/// Solo muestra conversaciones donde el usuario es autor de la publicación o
-/// participante directo (un tercero ajeno no puede leer ni listar).
+/// Conversaciones privadas del vecino y grupos de emergencia consultados.
 class ChatListScreen extends StatelessWidget {
   const ChatListScreen({super.key, required this.controller});
 
@@ -47,13 +45,34 @@ class ChatListScreen extends StatelessWidget {
                 ),
                 SizedBox(height: 6),
                 Text(
-                  'Cada conversación está ligada a un servicio o solicitud del barrio y es privada exclusivamente entre los dos vecinos participantes.',
+                  'Tus conversaciones privadas y los grupos de emergencia que has abierto.',
                   style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 14),
+          if (controller.emergencyGroupChats.isNotEmpty) ...[
+            const Text(
+              'Grupos de emergencia',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            for (final p in controller.emergencyGroupChats)
+              Card(
+                child: ListTile(
+                  key: ValueKey('emergency_group_${p.id}'),
+                  leading: const Icon(Icons.groups_outlined),
+                  title: Text(p.title),
+                  subtitle: const Text('Vecinos del mismo distrito'),
+                  onTap: () => controller.openEmergencyGroup(p),
+                ),
+              ),
+            const SizedBox(height: 16),
+          ],
+          const Text(
+            'Chats privados',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
           if (threads.isEmpty)
             Container(
               padding: const EdgeInsets.all(18),
