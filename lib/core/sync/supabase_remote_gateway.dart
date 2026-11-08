@@ -1120,6 +1120,49 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     return result;
   }
 
+  Future<Map<String, dynamic>> fetchCommunityIntelligence({
+    required String district,
+    required double radius,
+    required int windowMinutes,
+    required int minimumNeighbors,
+    String? requestId,
+    String? afterId,
+  }) async {
+    _requireRealBackend();
+    final result = await _client.rpc(
+      requestId == null
+          ? 'community_risk_snapshot'
+          : 'community_help_candidates',
+      params: requestId == null
+          ? {
+              'p_district': district,
+              'p_radius': radius,
+              'p_minutes': windowMinutes,
+              'p_minimum': minimumNeighbors,
+            }
+          : {'p_request': requestId, 'p_after': afterId},
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<Publication?> fetchIntelligencePublication(String id) async {
+    _requireRealBackend();
+    final row = await _client
+        .from('publications')
+        .select('*,profiles!publications_author_id_fkey(alias)')
+        .eq('id', id)
+        .isFilter('deleted_at', null)
+        .maybeSingle()
+        .timeout(const Duration(seconds: 12));
+    if (row == null) return null;
+    return Publication.fromSqlMap({
+      ...row,
+      'owner_user_id': row['author_id'],
+      'author_alias': (row['profiles'] as Map?)?['alias'] ?? 'Vecino',
+      'sync_status': 'confirmado',
+    });
+  }
+
   Future<List<Publication>> fetchOwnMapPublications() async {
     _requireRealBackend();
     final user = _client.auth.currentUser;

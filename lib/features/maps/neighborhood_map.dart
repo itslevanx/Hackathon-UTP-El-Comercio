@@ -1,3 +1,5 @@
+import '../../core/intelligence/community_intelligence.dart';
+
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -53,6 +55,8 @@ class NeighborhoodMap extends StatefulWidget {
     required this.records,
     required this.center,
     required this.onSelect,
+    this.risks = const [],
+    this.onSelectRisk,
     this.privateLocation,
     this.selectionPoint,
     this.onSelectPoint,
@@ -62,6 +66,8 @@ class NeighborhoodMap extends StatefulWidget {
     this.tileProvider,
   });
   final List<NeighborhoodMapRecord> records;
+  final List<RiskConcentration> risks;
+  final ValueChanged<RiskConcentration>? onSelectRisk;
   final LatLng? center;
   final LatLng? privateLocation;
   final LatLng? selectionPoint;
@@ -254,6 +260,54 @@ class _NeighborhoodMapState extends State<NeighborhoodMap>
                     tileUpdateTransformer: TileUpdateTransformers.debounce(
                       const Duration(milliseconds: 180),
                     ),
+                  ),
+                  CircleLayer(
+                    circles: [
+                      for (final risk in widget.risks)
+                        CircleMarker(
+                          point: LatLng(risk.lat, risk.lng),
+                          radius: 150,
+                          useRadiusInMeter: true,
+                          color:
+                              (risk.needsAttention
+                                      ? Colors.orange
+                                      : Colors.blue)
+                                  .withValues(alpha: .15),
+                          borderColor: risk.needsAttention
+                              ? Colors.orange
+                              : Colors.blue,
+                          borderStrokeWidth: 2,
+                        ),
+                    ],
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      for (final risk in widget.risks)
+                        Marker(
+                          point: LatLng(risk.lat, risk.lng),
+                          width: 64,
+                          height: 64,
+                          child: Semantics(
+                            label:
+                                '${risk.label}: ${risk.neighbors} vecinos, sin verificar',
+                            button: true,
+                            child: IconButton.filledTonal(
+                              onPressed: () => widget.onSelectRisk?.call(risk),
+                              tooltip:
+                                  '${risk.label}: ${risk.neighbors} vecinos',
+                              icon: Badge(
+                                label: Text('${risk.neighbors}'),
+                                child: Icon(
+                                  Icons.groups,
+                                  color: risk.needsAttention
+                                      ? Colors.deepOrange
+                                      : Colors.blue,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   Builder(
                     builder: (context) {
