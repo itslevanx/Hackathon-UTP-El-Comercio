@@ -1,3 +1,4 @@
+import '../intelligence/recommendations_screen.dart';
 import '../publish/publication_owner_actions.dart';
 import '../../core/accessibility/text_input_support.dart';
 
@@ -228,6 +229,22 @@ class _FavorDetailScreenState extends State<FavorDetailScreen> {
             ),
           ),
 
+          if ((fav.kind == PublicationKind.favorSolicitud ||
+                  fav.kind == PublicationKind.emergenciaSolicitud) &&
+              fav.authorId == c.currentUser?.id &&
+              fav.status == PublicationStatus.abierta)
+            OutlinedButton.icon(
+              key: const Key('help_recommendations'),
+              onPressed: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      RecommendationsScreen(app: c, requestId: fav.id),
+                ),
+              ),
+              icon: const Icon(Icons.handshake_outlined),
+              label: const Text('Consultar ayudas recomendadas'),
+            ),
           if (_feedbackMessage != null) ...[
             const SizedBox(height: 12),
             Container(

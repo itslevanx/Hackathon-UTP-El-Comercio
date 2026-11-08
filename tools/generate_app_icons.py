@@ -1,14 +1,12 @@
-"""Renderiza el icono vectorial en los tamaños usados por cada plataforma."""
-import io
+"""Genera los iconos de cada plataforma a partir del logotipo original."""
 import json
 from pathlib import Path
 
-import resvg_py
-from PIL import Image
+from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
-source = ROOT / 'assets/branding/conecta2-icon.svg'
-image = Image.open(io.BytesIO(resvg_py.svg_to_bytes(svg_path=str(source)))).convert('RGB')
+source = ROOT / 'assets/branding/conecta2-logo.jpg'
+image = ImageOps.pad(Image.open(source).convert('RGB'), (1024, 1024), color='white', method=Image.Resampling.LANCZOS)
 
 def save(relative, size):
     target = ROOT / relative

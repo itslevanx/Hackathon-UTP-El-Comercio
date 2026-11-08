@@ -289,3 +289,130 @@ Desde «Mis publicaciones y reportes» también puedes editar o eliminar tus avi
 Los chats privados se agrupan por vecino, aunque lo contactes desde distintos servicios. El mensaje de contacto conserva el nombre del aviso como contexto. Los historiales anteriores se reúnen sin borrar sus mensajes y los borradores pendientes se conservan. La lista se ordena por el último mensaje, con los chats fijados primero; recibe cambios en tiempo real y consulta de nuevo al recuperar conexión.
 
 La migración `20261108163300_neighbor_chats_and_activity.sql` añade consultas y envíos entre vecinos con RLS, reutilización de la conversación existente e historial paginado. No elimina hilos ni mensajes históricos. Sus verificaciones están en `supabase/tests/neighbor_chat_verification.sql`.
+
+## Asistente vecinal por voz
+
+El micrófono circular del centro de la navegación abre el dictado para usuarios con sesión activa. También permite escribir cuando no se puede usar el micrófono. El recorrido es: hablar, terminar la grabación, corregir la descripción y la zona, revisar el formulario habitual y pulsar su botón de envío. **Ni la transcripción ni la clasificación publican o mandan mensajes automáticamente.**
+
+La captura usa `record` 7.1.2 con WAV mono de 16 kHz y 16 bits, limitado a 30 segundos. Un puente FFI local, `packages/conecta2_voice`, integra [whisper.cpp 1.9.5](https://github.com/ggml-org/whisper.cpp/tree/v1.9.5) desde fuentes verificadas. La inferencia corre en otro isolate, en CPU, con hasta cuatro hilos y una sola operación simultánea. Cada operación libera el contexto del modelo. Cancelar solicita la interrupción nativa; la carga inicial del modelo debe terminar antes de que se libere su contexto. No se usan servicios de reconocimiento del sistema que puedan recurrir a la nube.
+
+Se eligió un puente pequeño sobre el proyecto original para fijar la versión, controlar la cancelación y evitar bindings que descargan modelos o registran transcripciones sin control de la aplicación. El backend de voz no depende de Supabase, Firebase ni CARTO.
+
+### Modelo y privacidad
+
+El modelo es **Whisper base multilingüe cuantizado Q5_1**, con español fijado como idioma de reconocimiento, sin traducción al inglés. El archivo `ggml-base-q5_1.bin` ocupa **59.707.625 bytes**, unos 60 MB. Se descarga desde el [repositorio del modelo](https://huggingface.co/ggerganov/whisper.cpp/tree/5359861c739e955e79d9a303bcbc70fb988958b1), únicamente al confirmar el diálogo de descarga. La revisión y el SHA-256 están fijados en `voice_model_store.dart`; el tamaño y el hash se comprueban antes de instalarlo y al volver a abrir el asistente. Los archivos incompletos se eliminan. La descarga puede cancelarse y requiere internet; después la transcripción y el análisis funcionan sin conexión.
+
+El modelo se guarda en el almacenamiento de soporte de la app, fuera del instalador. whisper.cpp y el modelo tienen licencia MIT; `record` 7.1.2 usa BSD de tres cláusulas. sus fuentes y atribuciones figuran en `assets/licenses/whisper.txt` y en el registro de licencias de Flutter. Las fuentes nativas y el XCFramework se reconstruyen localmente y no se versionan como binarios.
+
+El audio permanece en el directorio temporal privado del teléfono y se retira al terminar, cancelar o fallar. Al abrir la app se intenta limpiar cualquier temporal restante de una terminación del proceso. Salir de la pantalla o interrumpir la app cancela la captura. No hay escucha permanente, servicios de grabación en segundo plano ni palabras de activación. No se registra el audio ni el texto reconocido en logs; el motor nativo silencia sus logs de inferencia. Ningún cliente HTTP recibe audio: su único uso en este módulo es descargar el modelo público.
+
+### Análisis y revisión
+
+`VoiceAnalyzer` normaliza tildes y espacios y aplica reglas locales para sismos, incendios, inundaciones, derrumbes, accidentes, cortes de servicios, recursos y asistencia. Detecta cantidades explícitas y nombres del catálogo UBIGEO instalado. Las negaciones y las expresiones de incertidumbre reducen falsos positivos; una situación sin información suficiente queda sin clasificar. Las reglas críticas y urgentes se pueden ampliar mediante `VoiceRules`.
+
+Las prioridades Baja y Media se guardan como `normal`, Alta como `urgente` y Atención inmediata como `emergencia`, respetando los tres valores del dominio existente. Son sugerencias explicadas, no diagnósticos ni confirmaciones oficiales. La advertencia de contactar a los servicios oficiales aparece antes de grabar. La app no da instrucciones de rescate ni sustituye esos servicios.
+
+Los distritos con nombres repetidos o varias ubicaciones mencionadas requieren confirmación con `PeruLocationSelector`. Mencionar un distrito **no obtiene ni reutiliza GPS del perfil**. El borrador no contiene coordenadas; el vecino puede elegir un punto después mediante el selector de mapa existente. En el formulario final se pueden corregir el tipo de publicación, la categoría, la prioridad, el distrito, el título y la descripción.
+
+Al continuar se prepara un `FormDraft` en SQLite, con los metadatos de voz dentro de `location_json`, sin nueva tabla ni migración. Si ya existe un borrador de ese tipo, se pide confirmación y se conserva una copia anterior. El envío usa `AppController.submitPublication` y la misma transacción y cola de sincronización de los formularios habituales. Sin internet queda pendiente; no se afirma que otros vecinos hayan recibido el aviso. La zona del perfil no cambia por dictar otro distrito.
+
+### Preparar otra computadora
+
+Requiere Flutter 3.47.9, Dart 3.13.7, Python 3 y CMake 3.22 o posterior. Se comprobó la preparación nativa con CMake 3.31.10. Para iOS se necesita Xcode y su SDK; el mínimo sigue siendo iOS 15. Para Android hacen falta JDK, Android SDK, NDK y CMake 3.22.1 configurados en Gradle; el proyecto usa API 36 y mínimo API 24.
+
+```sh
+# Android: descarga las fuentes nativas verificadas.
+python3 tools/prepare_voice_engine.py
+
+# iOS: además compila las bibliotecas y crea el XCFramework local.
+python3 tools/prepare_voice_engine.py --ios --cmake /ruta/a/cmake
+
+flutter pub get
+```
+
+El script comprueba el archivo oficial contra un hash fijo. Para iOS genera slices de iPhone arm64 y simulador arm64/x86_64; Swift Package Manager incorpora el puente y el XCFramework. No se cambian Bundle ID, Application ID ni firma. Android compila las mismas fuentes con CMake/NDK y empaqueta `libconecta2_voice.so`, con alineación de página de 16 KB. El puente declara el mismo AGP que la aplicación. El modelo de reconocimiento no se descarga como parte de la compilación: lo prepara el vecino en la app.
+
+Los permisos nuevos son `RECORD_AUDIO` en Android y `NSMicrophoneUsageDescription` en iOS. No se solicita permiso de reconocimiento de voz en la nube ni almacenamiento compartido. La configuración local de Supabase sigue siendo la habitual; en un worktree hay que conservar `.env.local.json` y ejecutar `python3 tools/configure_ios_environment.py` para abrir Xcode con esa configuración.
+
+### Pruebas y límites pendientes
+
+```sh
+flutter analyze
+flutter test
+
+# Prueba opcional del motor real en macOS/Linux con un WAV de prueba local:
+cmake -S packages/conecta2_voice/test -B /tmp/conecta2-voice-validation
+cmake --build /tmp/conecta2-voice-validation --parallel 4
+python3 tools/verify_voice_native.py \
+  --library /tmp/conecta2-voice-validation/libvoice_validation.dylib \
+  --model /ruta/al/ggml-base-q5_1.bin \
+  --audio /ruta/a/prueba-espanol.wav --expect-word agua
+# En Linux, la biblioteca generada termina en .so.
+```
+
+Las pruebas cubren los ejemplos en español, tildes, cantidades, ubicaciones ambiguas, negaciones, incertidumbre, texto vacío, permisos denegados, modelo ausente, descarga inválida, cancelación, errores del motor, preservación de zona y coordenadas, envío bajo confirmación y navegación con texto ampliado. La prueba nativa no graba, no envía audio ni imprime transcripciones. Se verificó el reconocimiento real con un audio sintético en español generado localmente, además de concurrencia, cancelación, silencio y formato WAV inválido.
+
+La validación física de captura, interrupciones, consumo de RAM/CPU, batería, latencia y precisión con ruido o acentos locales sigue pendiente en Android e iPhone. El tiempo medido con audio sintético en una Mac no representa rendimiento móvil. El modelo puede confundir palabras, omitir información o producir texto incorrecto; por eso toda la información queda editable y requiere un envío explícito. La implementación no ofrece transcripción de larga duración ni escucha continua. Android necesita validarse con su SDK/NDK; no se declara compilado cuando esas herramientas faltan.
+
+Validación de esta entrega: `flutter analyze` sin incidencias y **130 pruebas Flutter aprobadas**. Se compiló el XCFramework de iPhone arm64 y simulador arm64/x86_64, además de la app para iOS Simulator y de Release para iPhone sin firma, verificando que AOT conserva los símbolos FFI. La prueba del motor real en macOS reconoció el audio sintético en español y comprobó concurrencia, cancelación, silencio y WAV inválido. Android no se compiló porque esta Mac no tiene Android SDK ni Java Runtime. No se ejecutó ni instaló la app en dispositivos físicos.
+
+## Riesgos comunitarios y ayudas recomendadas
+
+**Explorar mapa** distingue las agrupaciones visuales de marcadores de las concentraciones de reportes. La RPC `community_risk_snapshot` ejecuta DBSCAN en PostGIS por distrito y categoría, sobre reportes de emergencia abiertos o en coordinación. Usa las ubicaciones públicas aproximadas y una proyección UTM del hemisferio sur elegida según la longitud media del distrito consultado. El radio se mide en metros proyectados; no representa un límite exacto sobre el terreno.
+
+Se conserva el reporte más reciente de cada cuenta y categoría dentro de la ventana temporal. Se excluyen eliminados, demostraciones, reportes futuros, ubicaciones ausentes y reportes de invitados sin identidad de cuenta. Las cuentas distintas no equivalen a identidades humanas verificadas. El límite es de 1.000 reportes independientes por consulta: si se supera, no se generan concentraciones parciales. Los reportes individuales siguen disponibles en la lista habitual.
+
+La configuración se concentra en `lib/core/intelligence/community_intelligence.dart`, clase `IntelligenceConfig`:
+
+| Parámetro | Valor inicial | Rango admitido por el servidor |
+|---|---:|---:|
+| Radio DBSCAN | 300 m | 50–1.000 m |
+| Ventana temporal | 15 minutos | 1–60 minutos |
+| Mínimo de cuentas distintas | 3 | 3–20 |
+| Compatibilidad del recurso | 40 % | Pesos no negativos que sumen 100 % |
+| Distancia | 25 % | Igual |
+| Disponibilidad | 20 % | Igual |
+| Urgencia de la solicitud | 15 % | Igual |
+
+Una concentración requiere atención cuando alcanza el doble del mínimo de cuentas y contiene un reporte del último tercio de la ventana. **Nunca se marca como emergencia confirmada**: el modelo actual no contiene una fuente autorizada de verificación ni evidencias estructuradas. Los círculos ilustran la zona aproximada del marcador, no el alcance de un desastre. El detalle muestra fechas, motivo y acceso a los reportes permitidos por RLS. Se puede filtrar por categoría y nivel de atención.
+
+### Coincidencias entre solicitudes y ofertas
+
+Desde el detalle de una solicitud propia abierta, **Consultar ayudas recomendadas** busca ofertas autorizadas del mismo distrito. El servidor filtra por titular, estado, consentimiento y familia de recurso; Dart puntúa los candidatos. Se incluyen ofertas de favores, préstamos, donaciones, habilidades, servicios y recursos de emergencia con consentimiento. Se excluyen ofertas resueltas, canceladas, en coordinación, eliminadas, de demostración y del propio solicitante.
+
+La compatibilidad usa identificadores de categoría, nunca el título ni palabras sueltas de la descripción. Hay equivalencias explícitas para `agua_potable`/`agua`, `movilidad`/`transporte` y `albergue`/`refugio`. Las demás categorías deben coincidir exactamente. Las categorías genéricas `general`, `donaciones` y `habilidades` no generan recomendaciones: se puede elegir una categoría concreta al publicar o editar, conservando el resto del aviso. Para ampliar las equivalencias hay que mantener alineados `CommunityCategories.family` y `community_resource_family`.
+
+El puntaje suma compatibilidad, cercanía normalizada hasta 20 km, disponibilidad y urgencia. Sin coordenadas comparables, la cercanía recibe cero puntos y se indica distancia desconocida. No se interpreta un horario escrito como prueba de disponibilidad: una oferta abierta recibe la mitad del peso de disponibilidad y exige confirmación con el vecino. **Marcar recurso agotado** pasa la oferta a resuelta mediante la cola de estados existente. El puntaje es orientativo, no una probabilidad de éxito ni una acreditación profesional. Los empates se ordenan por identificador para mantener resultados estables.
+
+Las ofertas llegan en páginas de 200, con cursor por identificador y **Cargar más ofertas**. La clasificación compara las páginas cargadas, no todas las ofertas aún sin consultar. Cada actualización comienza otra vez por la primera página. El detalle y el contacto vuelven a comprobar la publicación en el servidor; el mensaje solo se envía después de que el usuario lo escriba y pulse Enviar. Se reutiliza el chat privado por vecino.
+
+### Actualización, caché y permisos
+
+`IntelligenceController` reutiliza los avisos del controlador de la app y el ciclo de consulta de 30 segundos. Agrupa cambios durante 800 ms y no consulta al desplazar o ampliar el mapa. Las ediciones, eliminaciones, cambios de zona, sesión y conectividad invalidan la vigencia de la vista. La consulta periódica actualiza también las ventanas temporales aunque no lleguen nuevos reportes.
+
+SQLite **versión 6** añade únicamente `intelligence_cache`. Sus claves incluyen cuenta, UBIGEO, solicitud y configuración del algoritmo. Los resultados llevan fecha de consulta y vencimiento. La migración local conserva las publicaciones, borradores y operaciones pendientes; al salir se elimina la caché de inteligencia de esa cuenta.
+
+Sin conexión se muestran exclusivamente consultas guardadas, con su fecha y advertencia de caducidad. No se ejecuta DBSCAN local ni se buscan ofertas nuevas en el feed incompleto del teléfono. Los detalles guardados de recomendaciones siguen accesibles; el contacto y la confirmación de disponibilidad requieren volver a verificar con conexión. Un fallo de red conserva la copia, mientras que un rechazo de autorización la descarta. Cargar páginas posteriores no renueva la antigüedad de las páginas previas. El mapa base conserva sus propias reglas de caché de CARTO, sin nuevas descargas masivas.
+
+La migración incremental `supabase/migrations/20261108210000_community_intelligence.sql` añade dos índices y tres funciones: `community_resource_family`, `community_risk_snapshot` y `community_help_candidates`. Las RPC son `SECURITY INVOKER`, tienen `search_path` vacío y solo permiten ejecución autenticada. No amplían RLS, no publican perfiles privados y no requieren claves de servicio. Las coordenadas de concentraciones se redondean a tres decimales. No se añade una tabla de verificación ni un sistema de bloqueo: cualquier futura política restrictiva sobre publicaciones se aplica también a estas consultas.
+
+La migración comunitaria se activó en el proyecto actual el 8 de noviembre de 2026. Se comprobó la solicitud real de agua con una donación temporal bajo el rol autenticado; la cuenta y la oferta de prueba se revirtieron. En otros entornos hay que revisar y aplicar la migración antes de consultar las RPC. No hay configuración adicional de CARTO ni nuevas dependencias.
+
+### Verificación de estos módulos
+
+```sh
+flutter analyze
+flutter test
+# Base local o de pruebas con las migraciones del repositorio aplicadas:
+psql "$LOCAL_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/community_intelligence_verification.sql
+```
+
+Las pruebas nuevas cubren radio, ventana temporal, categorías incompatibles, cuentas repetidas, coordenadas modificadas o ausentes, eliminaciones, atención sin verificación, RLS, límite de 1.000 reportes, paginación, puntuación, empates, agotados, consentimiento, caché aislada, reconexión, respuestas tardías, migración SQLite y selección del marcador de concentración. Las fixtures SQL se revierten al finalizar.
+
+Para validar en Android e iOS, usar un entorno de pruebas con tres cuentas distintas, el mismo UBIGEO y reportes de la misma categoría a menos de 300 metros publicados dentro de 15 minutos. Abrir Explorar mapa, revisar la concentración, cambiar los filtros y editar o resolver uno de los reportes; la concentración debe actualizarse en el siguiente ciclo. Crear también una solicitud de agua y una oferta ajena de agua, comprobar su recomendación y el chat existente; una oferta de transporte no debe aparecer. Marcar la oferta como agotada y actualizar. Tras consultar ambas vistas, desconectar internet, reabrirlas y comprobar las fechas de datos guardados y que no se confirme disponibilidad. Reconectar y actualizar.
+
+Capacidad del proyecto remoto comprobada en lectura: PostgreSQL 17.11, PostGIS 3.3.7 y `ST_ClusterDBSCAN` disponible en `extensions`. Las verificaciones SQL se ejecutaron en una base local aislada con PostgreSQL 17.5 y PostGIS 3.5.2; no equivalen a una prueba de despliegue en producción. La implementación usa una función [disponible desde PostGIS 2.3](https://postgis.net/docs/ST_ClusterDBSCAN.html), con orden explícito para asignaciones de borde reproducibles.
+
+Validación de esta entrega: 111 pruebas Flutter aprobadas, `flutter analyze` sin incidencias, nueve scripts SQL aprobados en la base local e iOS Simulator compilado sin firma. Android no se compiló porque este entorno no tiene Android SDK ni Java Runtime. No se instalaron estos cambios en dispositivos físicos.
+
+El panel de riesgos del mapa es desplegable para dar prioridad al mapa y a los avisos. Los mensajes de conexión se mantienen breves; el detalle conserva el contexto de cada concentración.

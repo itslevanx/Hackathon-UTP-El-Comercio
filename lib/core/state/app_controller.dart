@@ -774,6 +774,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     bool shareResourceConsent = false,
     String? customClientMutationId,
     ChosenMapLocation? location,
+    String? districtUbigeoOverride,
+    PublicationPriority? priorityOverride,
   }) async {
     final user = _currentUser;
     if (user == null && kind != PublicationKind.emergenciaSolicitud) {
@@ -787,13 +789,26 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     if (location != null) _validatePublicationLocation(location, kind);
+    if (districtUbigeoOverride != null &&
+        locationCatalog.district(districtUbigeoOverride) == null) {
+      throw StateError(
+        'Selecciona un distrito reconocido en el catálogo INEI.',
+      );
+    }
+    final district =
+        location?.districtUbigeo ??
+        districtUbigeoOverride ??
+        activeDistrictUbigeo;
+    final anotherDistrict = district != activeDistrictUbigeo;
     final now = DateTime.now().toUtc();
     final mutationId = customClientMutationId ?? EntityId.create();
     final pubId = EntityId.create();
 
-    final priority = kind.isEmergency
-        ? PublicationPriority.emergencia
-        : PublicationPriority.normal;
+    final priority =
+        priorityOverride ??
+        (kind.isEmergency
+            ? PublicationPriority.emergencia
+            : PublicationPriority.normal);
 
     final draftPub = Publication(
       id: pubId,
@@ -805,18 +820,28 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       category: category,
       title: title.trim(),
       description: description.trim(),
-      neighborhood: location == null
+      neighborhood: location == null && districtUbigeoOverride == null
           ? activeNeighborhood
-          : locationCatalog.district(location.districtUbigeo)!.name,
-      sector: activeSector,
-      districtUbigeo: location?.districtUbigeo ?? activeDistrictUbigeo,
+          : locationCatalog.district(district)?.name ?? activeNeighborhood,
+      sector: anotherDistrict || districtUbigeoOverride != null
+          ? 'Zona general del distrito'
+          : activeSector,
+      districtUbigeo: district,
       availabilityText: availabilityText.trim().isEmpty
           ? 'Horario flexible previa coordinación'
           : availabilityText.trim(),
       priority: priority,
       status: PublicationStatus.abierta,
-      approxLat: location?.publicLat ?? activeLat,
-      approxLng: location?.publicLng ?? activeLng,
+      approxLat:
+          location?.publicLat ??
+          (anotherDistrict || districtUbigeoOverride != null
+              ? null
+              : activeLat),
+      approxLng:
+          location?.publicLng ??
+          (anotherDistrict || districtUbigeoOverride != null
+              ? null
+              : activeLng),
       shareResourceConsent: shareResourceConsent,
       shareServiceLocation: location?.shareExactService ?? false,
       serviceLat: location?.serviceLat,

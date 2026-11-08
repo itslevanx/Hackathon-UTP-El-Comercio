@@ -1,5 +1,11 @@
 import 'dart:async';
 
+import 'features/voice_assistant/voice_audio.dart';
+import 'features/voice_assistant/voice_assistant_screen.dart';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -31,6 +37,12 @@ import 'features/shared/civic_widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  unawaited(DeviceVoiceAudio.clearStaleAudio().catchError((_) {}));
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks([
+      'whisper.cpp',
+    ], await rootBundle.loadString('assets/licenses/whisper.txt'));
+  });
   unawaited(PushNotificationService.instance.initialize());
 
   if (AppConfig.hasSupabaseCredentials) {
@@ -187,7 +199,7 @@ class _MainCivicShell extends StatelessWidget {
           child: _buildActiveSectionBody(),
         ),
       ),
-      bottomNavigationBar: _buildAccessibleBottomNav(),
+      bottomNavigationBar: _buildAccessibleBottomNav(context),
     );
   }
 
@@ -230,7 +242,7 @@ class _MainCivicShell extends StatelessWidget {
     }
   }
 
-  Widget _buildAccessibleBottomNav() {
+  Widget _buildAccessibleBottomNav(BuildContext context) {
     final destinations = <(String, IconData, VoidCallback)>[
       ('Inicio', Icons.home_outlined, controller.goHome),
       (
@@ -256,18 +268,63 @@ class _MainCivicShell extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final destination in destinations)
+            for (var i = 0; i < destinations.length; i++) ...[
+              if (i == 2)
+                Expanded(
+                  child: Transform.translate(
+                    offset: const Offset(0, -12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 60,
+                          height: 60,
+                          child: FilledButton(
+                            key: const Key('nav_voz'),
+                            style: FilledButton.styleFrom(
+                              shape: const CircleBorder(),
+                              padding: EdgeInsets.zero,
+                              elevation: 3,
+                            ),
+                            onPressed: () {
+                              if (!controller.isAuthenticated) {
+                                controller.navigateTo(AppSection.autenticacion);
+                                return;
+                              }
+                              Navigator.of(context).push<void>(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      VoiceAssistantScreen(app: controller),
+                                ),
+                              );
+                            },
+                            child: Semantics(
+                              label: 'Asistente por voz',
+                              child: Icon(Icons.mic, size: 30),
+                            ),
+                          ),
+                        ),
+                        const Text('Voz', style: TextStyle(fontSize: 16)),
+                      ],
+                    ),
+                  ),
+                ),
               Expanded(
                 child: TextButton(
-                  key: ValueKey('nav_${destination.$1.toLowerCase()}'),
-                  onPressed: destination.$3,
+                  key: ValueKey('nav_${destinations[i].$1.toLowerCase()}'),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  onPressed: destinations[i].$3,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(destination.$2),
+                      Icon(destinations[i].$2),
                       const SizedBox(height: 4),
                       Text(
-                        destination.$1,
+                        destinations[i].$1,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontSize: 16),
                       ),
@@ -275,6 +332,7 @@ class _MainCivicShell extends StatelessWidget {
                   ),
                 ),
               ),
+            ],
           ],
         ),
       ),

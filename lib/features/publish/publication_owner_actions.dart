@@ -1,3 +1,5 @@
+import '../../core/intelligence/community_intelligence.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/accessibility/text_input_support.dart';
@@ -35,6 +37,33 @@ class PublicationOwnerActions extends StatelessWidget {
           icon: const Icon(Icons.edit_outlined),
           label: const Text('Editar'),
         ),
+        if ([
+              PublicationKind.favorOferta,
+              PublicationKind.emergenciaOferta,
+              PublicationKind.donacion,
+              PublicationKind.prestamo,
+            ].contains(publication.kind) &&
+            publication.status == PublicationStatus.abierta)
+          TextButton.icon(
+            onPressed: () async {
+              try {
+                await controller.updatePublicationStatus(
+                  publicationId: publication.id,
+                  newStatus: PublicationStatus.resuelta,
+                );
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('No se pudo actualizar la disponibilidad.'),
+                    ),
+                  );
+                }
+              }
+            },
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: const Text('Marcar recurso agotado'),
+          ),
         TextButton.icon(
           key: ValueKey('delete_publication_${publication.id}'),
           onPressed: () async {
@@ -104,6 +133,7 @@ class EditPublicationScreen extends StatefulWidget {
 
 class _EditPublicationScreenState extends State<EditPublicationScreen> {
   final _form = GlobalKey<FormState>();
+  late String _category = widget.publication.category;
   late final _title = TextEditingController(text: widget.publication.title);
   late final _description = TextEditingController(
     text: widget.publication.description,
@@ -134,6 +164,31 @@ class _EditPublicationScreenState extends State<EditPublicationScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(widget.publication.kind.label),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _category,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Categoría del recurso o incidente',
+                ),
+                items:
+                    {
+                          _category: CommunityCategories.label(_category),
+                          ...CommunityCategories.labels,
+                        }.entries
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e.key,
+                            child: Text(e.value),
+                          ),
+                        )
+                        .toList(),
+                onChanged: _saving
+                    ? null
+                    : (v) {
+                        if (v != null) setState(() => _category = v);
+                      },
+              ),
               const SizedBox(height: 16),
               TextFormField(
                 key: const Key('edit_publication_title'),
@@ -189,7 +244,7 @@ class _EditPublicationScreenState extends State<EditPublicationScreen> {
                             widget.publication,
                             title: _title.text,
                             description: _description.text,
-                            category: widget.publication.category,
+                            category: _category,
                             availabilityText: _availability.text,
                           );
                           if (context.mounted) Navigator.pop(context);
