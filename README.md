@@ -25,9 +25,9 @@ Los avisos vecinales no sustituyen a los servicios oficiales de emergencia. Sin 
 | Row Level Security | Permisos de acceso a publicaciones y conversaciones |
 | Supabase Realtime | Actualización de mensajes |
 | SQLite | Caché, borradores y cola de operaciones por cuenta |
-| OpenStreetMap | Mapa con ubicación aproximada y alternativa de lista |
+| CARTO Voyager y OpenStreetMap | Mapa con ubicación aproximada y alternativa de lista |
 
-Las coordenadas públicas se redondean a tres decimales. El GPS es opcional y se puede elegir la zona manualmente. Compartir recursos de emergencia requiere consentimiento explícito.
+Las ubicaciones de perfiles y solicitudes se redondean a tres decimales. Un servicio puede compartir voluntariamente su punto y dirección exactos como lugar de atención; esta opción viene desactivada. El GPS es opcional. Compartir recursos de emergencia requiere consentimiento explícito.
 
 ## Ejecutar la app
 
@@ -45,7 +45,8 @@ Crea `.env.local.json` en la raíz con la configuración pública de tu proyecto
 {
   "SUPABASE_URL": "https://tu-proyecto.supabase.co",
   "SUPABASE_ANON_KEY": "tu-clave-publishable",
-  "APP_PROVISIONAL_NAME": "NEXO"
+  "APP_PROVISIONAL_NAME": "NEXO",
+  "CARTO_API_KEY": "tu-clave-basemaps"
 }
 ```
 
@@ -57,11 +58,51 @@ flutter run --dart-define-from-file=.env.local.json
 
 Sin configuración remota, los simulacros siguen disponibles. La app no crea sesiones ficticias ni presenta envíos locales como confirmados.
 
+## Mapas CARTO
+
+Desde Inicio, **Explorar mapa** permite consultar servicios, favores, recursos y avisos, filtrar por tipo, categoría y UBIGEO, seleccionar marcadores y abrir sus registros. El mapa del directorio y el de emergencias reutilizan el mismo componente. Las agrupaciones reúnen puntos cercanos en pantalla; la lista permite abrir un registro directamente.
+
+La clave `CARTO_API_KEY` se lee de `.env.local.json` mediante `--dart-define-from-file`. No se incluyen claves reales en el repositorio. La app instalada puede revelar una clave embebida: restringirla reduce abusos, pero los encabezados móviles no equivalen a una prueba criptográfica de identidad.
+
+El cliente solicita [CARTO Voyager](https://carto.com/basemaps/apikey/) con el parámetro `key`. Obtiene de la instalación `X-Ios-Bundle-Identifier` o `X-Android-Package` y `X-Android-Cert`; no deduce estos valores del deep link. Si faltan clave o identidad móvil, conserva la lista y explica el problema.
+
+| Plataforma | Identificador actual | Certificado |
+|---|---|---|
+| iOS Runner, Debug y Release | `com.example.hackathonUtpElComercio` | No aplica SHA-1 |
+| Android Debug | `com.example.hackathon_utp_el_comercio` | SHA-1 pendiente de obtener con Android SDK y Java |
+| Android Release | `com.example.hackathon_utp_el_comercio` | Actualmente Gradle usa la firma de depuración; no hay certificado de distribución verificado |
+
+Los identificadores están definidos en `ios/Runner.xcodeproj/project.pbxproj` y `android/app/build.gradle.kts`; el namespace Android coincide con su Application ID. Para Android, ejecutar `./gradlew :app:signingReport` desde `android/` cuando estén disponibles SDK y Java. Registrar en CARTO el SHA-1 de la firma efectiva, incluido el certificado de app signing de Play si se distribuye por esa vía. No registrar `pe.vecinos.app` como Bundle ID: es el esquema de retorno de autenticación.
+
+Las consultas reutilizan `search_publications_by_location` y `search_resources_within_radius`, con la sesión y RLS existentes. El mapa solicita hasta 201 resultados por consulta y presenta hasta 200; los filtros permiten acotar la vista. Desplazar o ampliar el mapa no lanza consultas de registros. El distrito explícito se consulta por su código completo; departamento y provincia filtran la copia local hasta elegir un distrito. Los recursos históricos carecen de UBIGEO y se muestran por cercanía, sin asignarles un distrito por su nombre.
+
+El GPS se solicita solo al tocar **Mi ubicación**. Se usa una lectura puntual redondeada para centrar la vista; muestra un pin azul privado durante la visita al mapa; no modifica el perfil ni publica la ubicación. Las publicaciones propias sin coordenadas o UBIGEO también aparecen en la lista general, con una acción para ubicarlas. Un filtro administrativo explícito sigue exigiendo un código compatible; no se asigna automáticamente el distrito del perfil a publicaciones antiguas. No hay seguimiento continuo ni marcadores de perfiles privados.
+
+Los [términos CARTO del 29/09/2026](https://carto.com/legal/basemap-terms/) permiten caché temporal de cliente hasta 30 días y prohíben la descarga masiva y la caché o proxy en servidores. Esta integración no guarda tiles en disco: reutiliza imágenes en memoria durante la sesión, limita la concurrencia a cuatro peticiones y cancela las obsoletas. No ofrece mapas offline descargados. Sin conexión, el catálogo INEI, los filtros y los registros de SQLite siguen disponibles; las calles pueden fallar y siempre hay alternativa de lista. El uso queda sujeto a las cuotas del proveedor; no se contrató ningún plan de pago.
+
+## Elegir un punto para una publicación
+
+**Elegir ubicación en el mapa** abre un editor opcional al publicar y al configurar la zona del perfil. Permite elegir departamento, provincia y distrito del catálogo INEI, tocar el mapa, arrastrar el pin o buscar una dirección. La referencia inicial de capital distrital no confirma una dirección: es necesario seleccionar o mover el punto antes de guardarlo. Se conserva el recorrido rápido de publicación sin abrir el editor.
+
+La búsqueda usa [geocoding](https://pub.dev/packages/geocoding), que consulta el proveedor nativo de iOS o Android bajo sus límites. La dirección solo se envía al buscar; no hay autocompletado, seguimiento ni consultas al servicio público Nominatim. Puede requerir conexión y devolver varias coincidencias o ninguna. Siempre hay que comprobar el distrito y el punto; no se garantiza la precisión del proveedor.
+
+En un servicio, **Compartir el punto y la dirección exactos como lugar de atención de mi servicio** permite publicar esa referencia para vecinos con sesión. Sin ese consentimiento se guarda únicamente el punto aproximado; la dirección escrita se descarta. El perfil, los favores y las emergencias mantienen su ubicación aproximada. La búsqueda de direcciones y los tiles requieren red; el catálogo, los borradores y los envíos pendientes funcionan con SQLite.
+
+Para ubicar una publicación antigua: **Inicio → Explorar mapa → Ubicar esta publicación en el mapa** en la lista propia. Seleccionar el punto y guardar. No se inventan coordenadas ni se migran automáticamente las ubicaciones antiguas. Si hay un filtro de distrito que excluya una publicación sin UBIGEO, quitarlo primero.
+
+SQLite **versión 3** añade los campos opcionales del servicio y `location_json` al borrador. La ubicación queda en una transacción con su operación pendiente. Cambiar la ubicación de una publicación existente usa `publication_location`, conserva la versión local mientras haya envíos pendientes y permite reintentos idempotentes. La migración de Supabase `20261107235826_public_service_locations.sql` incorpora esos campos y `update_publication_location`; verifica autoría, UBIGEO, coordenadas, consentimiento y versión. Los recibos de operaciones están en un esquema privado sin acceso directo desde clientes. Los registros históricos se conservan.
+
 ## Confirmación de correo en el teléfono
 
 En Supabase, abre **Authentication → URL Configuration** y configura `pe.vecinos.app://auth-callback` como **Site URL** y como una entrada exacta en **Redirect URLs**. Se necesita una cuenta con permisos para editar esa configuración.
 
 El enlace abre la app instalada en el teléfono; no requiere desplegar una página web. Para recibirlo hay que instalar una compilación que incluya el esquema de retorno. Los correos anteriores pueden seguir apuntando a `localhost`: si el correo ya se confirmó, inicia sesión con la cuenta existente.
+
+## Recuperar una contraseña
+
+En el formulario de acceso, **Olvidé mi contraseña** permite enviar un enlace al correo de la cuenta. La respuesta es genérica para no revelar si un correo está registrado. Abre el correo en el mismo teléfono y pulsa el enlace: el retorno `pe.vecinos.app://auth-callback`, ya registrado en Supabase e iOS/Android, lleva a una pantalla para escribir y repetir una nueva contraseña de al menos ocho caracteres.
+
+La pantalla se habilita únicamente tras el evento de recuperación validado por Supabase. La contraseña se actualiza con `auth.updateUser`, sin guardarse en SQLite, borradores ni cola offline. Se requiere conexión; los errores permiten reintentar y los enlaces vencidos requieren solicitar otro correo. No hace falta desplegar una página web. El envío y la recepción reales dependen de la configuración y los límites de correo de Supabase.
 
 ## Ubicaciones del Perú sin conexión
 
@@ -71,9 +112,9 @@ El recurso `assets/geography/peru_ubigeo_2026.json` ocupa unos 89 KB y se incluy
 
 `PeruLocationSelector` admite valores iniciales o controlados, validación, campos opcionales, estado deshabilitado y selección hasta departamento o provincia. Los campos dependientes se limpian cuando cambia el padre. Las opciones se consultan en memoria y solo se muestran las del nivel elegido; no hay llamadas HTTP ni consultas a Supabase para cargar ubicaciones.
 
-Está integrado en el registro y en la edición de la zona del perfil. Las publicaciones, favores y reportes de emergencia heredan el UBIGEO del perfil para conservar sus recorridos rápidos. Las referencias de barrio o sector siguen siendo texto aparte, sin asignarles un código administrativo.
+Está integrado en el registro, la edición de la zona del perfil y el editor opcional de ubicación de publicaciones. Las publicaciones, favores y reportes de emergencia heredan el UBIGEO del perfil para conservar sus recorridos rápidos, salvo que se elija expresamente otra ubicación. Las referencias de barrio o sector siguen siendo texto aparte, sin asignarles un código administrativo.
 
-SQLite conserva `district_ubigeo` en perfiles y publicaciones, y también en la cola pendiente. La versión 2 migra los registros anteriores conservando sus textos, coordenadas, borradores y operaciones. Los nombres antiguos o códigos incompletos no se convierten automáticamente: el formulario muestra el valor anterior hasta que el vecino elija una ubicación reconocida.
+SQLite conserva `district_ubigeo` en perfiles y publicaciones, y también en la cola pendiente. La migración desde la versión 1 conserva los textos, coordenadas, borradores y operaciones existentes. Los nombres antiguos o códigos incompletos no se convierten automáticamente: el formulario muestra el valor anterior hasta que el vecino elija una ubicación reconocida.
 
 La migración `20261107165219_peru_ubigeo_locations.sql` añade las columnas opcionales, sus índices y referencias al catálogo privado del servidor. Mantiene la búsqueda espacial anterior y añade una consulta por distrito para los registros sin coordenadas. El catálogo privado valida las escrituras; la app usa su copia local.
 
@@ -104,6 +145,7 @@ Las comprobaciones están en:
 - `supabase/tests/rls_and_postgis_verification.sql`: permisos, cercanía, recomendaciones, privacidad del chat y reintentos. Los datos de prueba se revierten al terminar.
 - `supabase/tests/deployment_health.sql`: estado de tablas, RLS, PostGIS y Realtime.
 - `supabase/tests/ubigeo_verification.sql`: catálogo, códigos válidos, perfiles y publicaciones sin GPS, compatibilidad y permisos. Revierte sus datos de prueba.
+- `supabase/tests/publication_location_verification.sql`: ubicación de publicaciones, consentimiento, autoría, versiones y reintentos. Revierte los datos de prueba.
 
 `supabase/seed.sql` contiene datos de demostración opcionales; no debe cargarse como contenido real del barrio.
 
@@ -126,9 +168,9 @@ node --check protipo/prototype.js
 node --check protipo/practice.js
 ```
 
-La revisión actual cuenta con 30 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y una advertencia de autenticación: la protección contra contraseñas filtradas está desactivada en el proyecto. Los avisos informativos de las tablas privadas sin políticas corresponden a su acceso cerrado a clientes.
+La revisión actual cuenta con 66 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y una advertencia de autenticación: la protección contra contraseñas filtradas está desactivada en el proyecto. Los avisos informativos de las tablas privadas sin políticas corresponden a su acceso cerrado a clientes.
 
-La app se compiló y abrió en un simulador iPhone con iOS 27.1, donde se completaron las cinco misiones del simulacro de sismo. También se verificó la selección Amazonas → Chachapoyas → Chachapoyas y el guardado local de la zona sin crear una cuenta. Todavía falta comprobar las conversaciones y la sincronización entre sesiones reales, GPS, VoiceOver y TalkBack. No hay APK validado: falta instalar el Android SDK en el entorno de revisión.
+La app se compiló y abrió en un simulador iPhone con iOS 27.1, donde se completaron las cinco misiones del simulacro de sismo. También se probaron la selección Amazonas → Chachapoyas → Chachapoyas, el guardado local de la zona, la búsqueda nativa de una referencia pública y el arrastre del pin, sin crear una cuenta. Todavía falta comprobar las conversaciones y la sincronización entre sesiones reales, GPS, VoiceOver y TalkBack. No hay APK validado: falta instalar el Android SDK en el entorno de revisión.
 
 ## Estructura
 
