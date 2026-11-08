@@ -173,11 +173,11 @@ class _NeighborhoodMapState extends State<NeighborhoodMap>
     final identityValid =
         widget.tileProvider != null ||
         MobileMapIdentity.isValid(_identity ?? {}, Theme.of(context).platform);
-    final available =
-        widget.online && widget.configuration.isConfigured && identityValid;
+    final available = widget.configuration.isConfigured && identityValid;
     String? unavailable;
     if (!widget.online) {
-      unavailable = 'Sin conexión: consulta los registros en la lista. No hay un mapa offline descargado.';
+      unavailable =
+          'Sin conexión: solo se muestran las zonas del mapa que ya abriste.';
     } else if (!widget.configuration.isConfigured) {
       unavailable =
           'El mapa está pendiente de configurar. La lista sigue disponible.';
@@ -190,6 +190,10 @@ class _NeighborhoodMapState extends State<NeighborhoodMap>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (!widget.online)
+          const Text(
+            'Mapa sin conexión: zonas vistas guardadas hasta 30 días. Las áreas no guardadas pueden quedar vacías.',
+          ),
         if (available) ...[
           SizedBox(
             height: 340,
@@ -225,6 +229,7 @@ class _NeighborhoodMapState extends State<NeighborhoodMap>
                         widget.tileProvider ??
                         (_tiles ??= CartoTileProvider(
                           configuration: widget.configuration,
+                          online: widget.online,
                           identity: _identity!,
                           onTileResult: (_) {},
                           onTileStatus: ((epoch) =>
@@ -443,8 +448,10 @@ class _NeighborhoodMapState extends State<NeighborhoodMap>
             ],
           ),
           if (_tileFailed)
-            const Text(
-              'No se cargaron algunas calles. Revisa la conexión o la configuración de CARTO; la lista permanece disponible.',
+            Text(
+              widget.online
+                  ? 'No se cargaron algunas calles. Revisa la conexión o reintenta; la lista permanece disponible.'
+                  : 'Esta vista incluye zonas que no están guardadas. Puedes consultar los avisos en la lista.',
               key: Key('map_tile_error'),
             ),
           if (!_tileLoaded && !_tileFailed && widget.tileProvider == null)

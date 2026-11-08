@@ -78,7 +78,7 @@ Las consultas reutilizan `search_publications_by_location` y `search_resources_w
 
 El GPS se solicita solo al tocar **Mi ubicación**. Se usa una lectura puntual redondeada para centrar la vista; muestra un pin azul privado durante la visita al mapa; no modifica el perfil ni publica la ubicación. Las publicaciones propias sin coordenadas o UBIGEO también aparecen en la lista general, con una acción para ubicarlas. Un filtro administrativo explícito sigue exigiendo un código compatible; no se asigna automáticamente el distrito del perfil a publicaciones antiguas. No hay seguimiento continuo ni marcadores de perfiles privados.
 
-Los [términos CARTO del 29/09/2026](https://carto.com/legal/basemap-terms/) permiten caché temporal de cliente hasta 30 días y prohíben la descarga masiva y la caché o proxy en servidores. Esta integración no guarda tiles en disco: reutiliza imágenes en memoria durante la sesión, limita la concurrencia a cuatro peticiones y cancela las obsoletas. No ofrece mapas offline descargados. Sin conexión, el catálogo INEI, los filtros y los registros de SQLite siguen disponibles; las calles pueden fallar y siempre hay alternativa de lista. El uso queda sujeto a las cuotas del proveedor; no se contrató ningún plan de pago.
+Los [términos CARTO del 29/09/2026](https://carto.com/legal/basemap-terms/) permiten caché temporal de cliente hasta 30 días y prohíben la descarga masiva y la caché o proxy en servidores. Los tiles consultados se conservan en una base SQLite separada, hasta 100 MB y durante el plazo indicado por el servidor, con un máximo de 30 días. Se eliminan los vencidos y se liberan los más antiguos cuando falta espacio. No se hacen descargas masivas ni anticipadas de regiones. Para preparar una zona, ábrela y recórrela con conexión en los niveles de zoom que necesites. Sin conexión pueden verse esas calles guardadas; las áreas no guardadas pueden quedar vacías. El catálogo INEI, los filtros y la lista de avisos siguen disponibles. El uso queda sujeto a las cuotas del proveedor; no se contrató ningún plan de pago.
 
 ## Elegir un punto para una publicación
 
@@ -86,11 +86,23 @@ Los [términos CARTO del 29/09/2026](https://carto.com/legal/basemap-terms/) per
 
 La búsqueda usa [geocoding](https://pub.dev/packages/geocoding), que consulta el proveedor nativo de iOS o Android bajo sus límites. La dirección solo se envía al buscar; no hay autocompletado, seguimiento ni consultas al servicio público Nominatim. Puede requerir conexión y devolver varias coincidencias o ninguna. Siempre hay que comprobar el distrito y el punto; no se garantiza la precisión del proveedor.
 
-En un servicio, **Compartir el punto y la dirección exactos como lugar de atención de mi servicio** permite publicar esa referencia para vecinos con sesión. Sin ese consentimiento se guarda únicamente el punto aproximado; la dirección escrita se descarta. El perfil, los favores y las emergencias mantienen su ubicación aproximada. La búsqueda de direcciones y los tiles requieren red; el catálogo, los borradores y los envíos pendientes funcionan con SQLite.
+En un servicio, **Compartir el punto y la dirección exactos como lugar de atención de mi servicio** permite publicar esa referencia para vecinos con sesión. Sin ese consentimiento se guarda únicamente el punto aproximado; la dirección escrita se descarta. El perfil, los favores y las emergencias mantienen su ubicación aproximada. Buscar direcciones y cargar calles nuevas requiere red. Las calles guardadas, el catálogo, los borradores y los envíos pendientes funcionan con SQLite.
 
 Para ubicar una publicación antigua: **Inicio → Explorar mapa → Ubicar esta publicación en el mapa** en la lista propia. Seleccionar el punto y guardar. No se inventan coordenadas ni se migran automáticamente las ubicaciones antiguas. Si hay un filtro de distrito que excluya una publicación sin UBIGEO, quitarlo primero.
 
 SQLite **versión 3** añade los campos opcionales del servicio y `location_json` al borrador. La ubicación queda en una transacción con su operación pendiente. Cambiar la ubicación de una publicación existente usa `publication_location`, conserva la versión local mientras haya envíos pendientes y permite reintentos idempotentes. La migración de Supabase `20261107235826_public_service_locations.sql` incorpora esos campos y `update_publication_location`; verifica autoría, UBIGEO, coordenadas, consentimiento y versión. Los recibos de operaciones están en un esquema privado sin acceso directo desde clientes. Los registros históricos se conservan.
+
+## Avisos, edición y uso sin conexión
+
+Debajo de las acciones de Inicio aparece **Avisos del barrio**, con tarjetas del más reciente al más antiguo. Incluye anuncios, servicios, favores, préstamos, donaciones, intercambios y reportes de emergencia. Las tarjetas se crean conforme se recorren, para mantener fluidez. El historial del distrito se descarga por páginas mientras la app está abierta y hay conexión; no hace falta recorrerlo entero para conservarlo. La primera descarga puede tardar y se retoma si se interrumpe. Si todavía no se ha elegido distrito, el feed consulta solo las publicaciones propias.
+
+El autor dispone de **Editar** y **Eliminar** en su tarjeta y en el detalle. Puede corregir título, descripción y disponibilidad del servicio. El punto se cambia desde Explorar mapa. Eliminar pide confirmación, quita el aviso del feed y del mapa y conserva las conversaciones asociadas. Los avisos eliminados no permiten nuevas ofertas o recomendaciones.
+
+Crear, editar y eliminar se guarda primero en SQLite junto con una operación pendiente. Al detectar conexión, o al volver a abrir la app, se intenta enviar la cola. El sistema operativo puede suspender una app cerrada; no se garantiza envío mientras permanezca cerrada. Si una creación nunca se ha intentado enviar y se elimina sin conexión, se cancela localmente y no se publica después. Si el envío ya pudo llegar al servidor, se conserva la eliminación pendiente. Un fallo anterior bloquea los cambios posteriores del mismo aviso, y los conflictos requieren revisión. Los reintentos no duplican la publicación ni la modificación.
+
+Sin internet se consulta el contenido que alcanzó a descargarse antes del corte, incluso después de cerrar y volver a abrir. Al recuperar conexión se actualizan los avisos guardados que hayan cambiado y se retiran los eliminados por sus autores. No se pueden conocer avisos nuevos del servidor mientras no haya conexión, iniciar una cuenta nueva, buscar direcciones en línea ni descargar calles que no estén guardadas. Los mensajes conservan su comportamiento de borrador cuando no pueden enviarse.
+
+SQLite versión **4** añade `deleted_at` sin eliminar registros ni operaciones anteriores. La migración `20261108033825_publication_crud_and_feed.sql` añade edición y eliminación idempotentes con control de autor y versión, el feed paginado y los identificadores de publicaciones retiradas. Estos identificadores permiten limpiar las copias de otros teléfonos sin exponer el contenido eliminado. Las conversaciones no se borran en cascada.
 
 ## Confirmación de correo en el teléfono
 
@@ -146,6 +158,7 @@ Las comprobaciones están en:
 - `supabase/tests/deployment_health.sql`: estado de tablas, RLS, PostGIS y Realtime.
 - `supabase/tests/ubigeo_verification.sql`: catálogo, códigos válidos, perfiles y publicaciones sin GPS, compatibilidad y permisos. Revierte sus datos de prueba.
 - `supabase/tests/publication_location_verification.sql`: ubicación de publicaciones, consentimiento, autoría, versiones y reintentos. Revierte los datos de prueba.
+- `supabase/tests/publication_crud_verification.sql`: edición, eliminación, feed, propagación de retiradas y permisos. Revierte los datos de prueba.
 
 `supabase/seed.sql` contiene datos de demostración opcionales; no debe cargarse como contenido real del barrio.
 
@@ -168,7 +181,7 @@ node --check protipo/prototype.js
 node --check protipo/practice.js
 ```
 
-La revisión actual cuenta con 66 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y una advertencia de autenticación: la protección contra contraseñas filtradas está desactivada en el proyecto. Los avisos informativos de las tablas privadas sin políticas corresponden a su acceso cerrado a clientes.
+La revisión actual cuenta con 76 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y una advertencia de autenticación: la protección contra contraseñas filtradas está desactivada en el proyecto. Los avisos informativos de las tablas privadas sin políticas corresponden a su acceso cerrado a clientes.
 
 La app se compiló y abrió en un simulador iPhone con iOS 27.1, donde se completaron las cinco misiones del simulacro de sismo. También se probaron la selección Amazonas → Chachapoyas → Chachapoyas, el guardado local de la zona, la búsqueda nativa de una referencia pública y el arrastre del pin, sin crear una cuenta. Todavía falta comprobar las conversaciones y la sincronización entre sesiones reales, GPS, VoiceOver y TalkBack. No hay APK validado: falta instalar el Android SDK en el entorno de revisión.
 

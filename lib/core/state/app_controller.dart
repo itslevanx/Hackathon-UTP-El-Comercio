@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../config/app_config.dart';
 import '../geography/peru_location_catalog.dart';
@@ -50,6 +51,32 @@ enum AppSection {
 /// Controlador central de estado de la aplicación comunitaria NEXO.
 class AppController extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _syncTimer;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  bool _networkUnavailable = false;
+  bool feedLoading = false, feedHasMore = true;
+  DateTime? _feedBeforeTime;
+  String? _feedBeforeId;
+  String? _feedHeadId;
+  String _feedScope = '';
+  bool _cachingFeed = false;
+  bool _appForeground = true;
+  String get _currentFeedScope => '${currentUser?.id}:$activeDistrictUbigeo';
+  void _resetFeedScope() {
+    if (_feedScope == _currentFeedScope) return;
+    _feedScope = _currentFeedScope;
+    _feedHeadId = null;
+    _feedBeforeTime = null;
+    _feedBeforeId = null;
+    feedHasMore = true;
+  }
+
+  List<Publication> get neighborhoodFeed => !isAuthenticated
+      ? const []
+      : (publications.where((p) => !p.isDeleted).toList()..sort((a, b) {
+          final order = b.createdAt.compareTo(a.createdAt);
+          return order == 0 ? b.id.compareTo(a.id) : order;
+        }));
+
   StreamSubscription<void>? _authSubscription;
   StreamSubscription<void>? _recoverySubscription;
   bool _passwordRecoveryPending = false;
@@ -178,6 +205,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   DateTime? get lastSyncTimestamp => _lastSyncTimestamp;
 
   bool get isOfflineMode =>
+      _networkUnavailable ||
       remoteGateway.simulateNetworkOffline ||
       (!remoteGateway.isLiveSupabaseConnected && !remoteGateway.isTestDouble);
 
@@ -247,6 +275,18 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         unawaited(_restoreSessionFromLink());
       }
       WidgetsBinding.instance.addObserver(this);
+      _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+        types,
+      ) {
+        if (_disposed) return;
+        _networkUnavailable = types.every(
+          (type) => type == ConnectivityResult.none,
+        );
+        outboxSyncService.networkAvailable = !_networkUnavailable;
+        notifyListeners();
+        if (!_networkUnavailable) unawaited(refreshFromServer());
+      }, onError: (Object _) {});
+
       _syncTimer = Timer.periodic(
         const Duration(seconds: 30),
         (_) => refreshFromServer(),
@@ -259,28 +299,69 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> refreshFromServer() async {
     if (_refreshingRemote ||
         _disposed ||
+        !_appForeground ||
         _currentUser == null ||
         !remoteGateway.isLiveSupabaseConnected ||
         remoteGateway.simulateNetworkOffline) {
       return;
     }
+    _resetFeedScope();
+    final scope = _feedScope;
     _refreshingRemote = true;
     final uid = _currentUser!.id;
     try {
       await outboxSyncService.syncPendingForUser(uid);
-      final publications = await remoteGateway.fetchPublicationsWithinRadius(
-        originLat: activeLat,
-        originLng: activeLng,
-        districtUbigeo: activeDistrictUbigeo,
-        radiusMeters: 20000,
+      final previousHead = _feedHeadId;
+      final page = await remoteGateway
+          .fetchFeedPage(districtUbigeo: activeDistrictUbigeo)
+          .timeout(const Duration(seconds: 15));
+      if (_disposed || _currentUser?.id != uid || scope != _currentFeedScope) {
+        return;
+      }
+      await database.mergeRemotePublications(page);
+      if (_feedBeforeTime == null ||
+          (page.length == 30 &&
+              previousHead != null &&
+              !page.any((p) => p.id == previousHead))) {
+        feedHasMore = page.length == 30;
+        if (page.isNotEmpty) {
+          _feedBeforeTime = page.last.createdAt;
+          _feedBeforeId = page.last.id;
+        }
+      }
+      _feedHeadId = page.firstOrNull?.id;
+      _networkUnavailable = false;
+      outboxSyncService.networkAvailable = true;
+      await outboxSyncService.syncPendingForUser(uid);
+      final cached = await database.listPublications(activeUserId: uid);
+      final updates = await remoteGateway
+          .fetchCachedPublicationUpdates(cached)
+          .timeout(const Duration(seconds: 15));
+      if (_disposed || currentUser?.id != uid || scope != _currentFeedScope) {
+        return;
+      }
+      await database.mergeRemotePublications(updates);
+      final tombstones = await remoteGateway
+          .fetchPublicationTombstones(cached.map((p) => p.id).toList())
+          .timeout(const Duration(seconds: 15));
+      if (_disposed || _currentUser?.id != uid || scope != _currentFeedScope) {
+        return;
+      }
+      await database.applyPublicationTombstones(tombstones);
+      await refreshAllLocalData();
+      unawaited(cacheFeedForOffline());
+      final snapshot = await remoteGateway.fetchCommunitySnapshot().timeout(
+        const Duration(seconds: 15),
       );
-      final snapshot = await remoteGateway.fetchCommunitySnapshot();
-      if (_disposed || _currentUser?.id != uid) return;
-      await database.mergeRemotePublications(publications);
+      if (_disposed || _currentUser?.id != uid || scope != _currentFeedScope) {
+        return;
+      }
       await database.mergeCommunitySnapshot(snapshot);
       await refreshAllLocalData();
     } catch (_) {
       if (!_disposed && _currentUser?.id == uid) {
+        _networkUnavailable = true;
+        outboxSyncService.networkAvailable = false;
         _statusBannerMessage = 'No se pudo actualizar el barrio. Consulta la copia guardada; los envíos pendientes aún NO están comunicados.';
         notifyListeners();
       }
@@ -348,7 +429,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) unawaited(refreshFromServer());
+    _appForeground = state == AppLifecycleState.resumed;
+    if (_appForeground) unawaited(refreshFromServer());
   }
 
   @override
@@ -357,6 +439,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _syncTimer?.cancel();
     unawaited(_authSubscription?.cancel());
     unawaited(_recoverySubscription?.cancel());
+    unawaited(_connectivitySubscription?.cancel());
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -398,9 +481,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       final updated = _publications
           .where((p) => p.id == _selectedPublication!.id)
           .toList();
-      if (updated.isNotEmpty) {
-        _selectedPublication = updated.first;
-      }
+      _selectedPublication = updated.firstOrNull;
     }
 
     notifyListeners();
@@ -893,6 +974,117 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     navigateTo(AppSection.chatConversacion);
   }
 
+  Future<void> cacheFeedForOffline() async {
+    if (_cachingFeed || _disposed || !isAuthenticated || isOfflineMode) return;
+    _cachingFeed = true;
+    final scope = _currentFeedScope;
+    try {
+      while (!_disposed &&
+          _appForeground &&
+          scope == _currentFeedScope &&
+          !isOfflineMode &&
+          feedHasMore) {
+        final before = _feedBeforeId;
+        await loadMoreFeed();
+        if (_feedBeforeId == before) break;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    } finally {
+      _cachingFeed = false;
+    }
+  }
+
+  Future<void> loadMoreFeed() async {
+    _resetFeedScope();
+    final scope = _feedScope;
+    if (feedLoading || !feedHasMore || !isAuthenticated || isOfflineMode) {
+      return;
+    }
+    feedLoading = true;
+    notifyListeners();
+    final uid = currentUser!.id;
+    try {
+      final page = await remoteGateway
+          .fetchFeedPage(
+            districtUbigeo: activeDistrictUbigeo,
+            beforeTime: _feedBeforeTime,
+            beforeId: _feedBeforeId,
+          )
+          .timeout(const Duration(seconds: 15));
+      if (_disposed || uid != currentUser?.id || scope != _currentFeedScope) {
+        return;
+      }
+      await database.mergeRemotePublications(page);
+      feedHasMore = page.length == 30;
+      if (page.isNotEmpty) {
+        _feedBeforeTime = page.last.createdAt;
+        _feedBeforeId = page.last.id;
+      }
+      await refreshAllLocalData();
+    } catch (_) {
+      if (!_disposed && uid == currentUser?.id) {
+        _statusBannerMessage =
+            'No se cargaron más avisos. Los guardados siguen disponibles.';
+      }
+    } finally {
+      if (!_disposed) {
+        feedLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> editPublication(
+    Publication publication, {
+    required String title,
+    required String description,
+    required String category,
+    String availabilityText = '',
+  }) async {
+    final changes = <String, Object?>{
+      'title': title.trim(),
+      'description': description.trim(),
+      'category': category.trim(),
+      'availability_text': availabilityText.trim(),
+    };
+    if (title.trim().length < 3 ||
+        title.trim().length > 120 ||
+        description.trim().isEmpty ||
+        description.trim().length > 1000 ||
+        category.trim().length < 2 ||
+        category.trim().length > 50 ||
+        availabilityText.trim().length > 200) {
+      throw StateError('Revisa los campos y sus límites.');
+    }
+    await _mutatePublication(publication, changes, false);
+  }
+
+  Future<void> deletePublication(Publication publication) =>
+      _mutatePublication(publication, {}, true);
+  Future<void> _mutatePublication(
+    Publication publication,
+    Map<String, Object?> changes,
+    bool deleting,
+  ) async {
+    final uid = currentUser?.id;
+    if (uid == null || publication.authorId != uid) {
+      throw StateError('Solo el autor puede cambiar su publicación.');
+    }
+    await database.editPublication(
+      publicationId: publication.id,
+      actingUserId: uid,
+      changes: changes,
+      delete: deleting,
+    );
+    if (deleting && _selectedPublication?.id == publication.id) {
+      _selectedPublication = null;
+      goHome();
+    }
+    await refreshAllLocalData();
+    await outboxSyncService.syncPendingForUser(uid);
+    if (currentUser?.id == uid) await refreshAllLocalData();
+  }
+
   void _validatePublicationLocation(
     ChosenMapLocation location,
     PublicationKind kind,
@@ -1143,6 +1335,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     final previousId = _currentUser?.id;
     await remoteGateway.signOutAccount();
     _passwordRecoveryPending = false;
+    _feedBeforeTime = null;
+    _feedBeforeId = null;
+    feedHasMore = true;
     if (previousId != null) {
       await database.clearPrivateCacheOnSignOut(previousId);
     }

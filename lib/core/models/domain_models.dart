@@ -4,6 +4,7 @@ import '../config/app_config.dart';
 
 /// Tipos de publicación soportados en la red vecinal.
 enum PublicationKind {
+  anuncio('anuncio', 'Anuncio del barrio', 'Anuncio vecinal'),
   servicio('servicio', 'Oficio o servicio', 'Directorio de servicios'),
   favorSolicitud('favor_solicitud', 'Solicitar ayuda o favor', 'Ayuda vecinal'),
   favorOferta('favor_oferta', 'Ofrecer un favor solidario', 'Oferta solidaria'),
@@ -266,6 +267,7 @@ class UserProfile {
 /// Publicación unificada (Servicio del directorio, Favor solidario o Reporte de emergencia).
 class Publication {
   const Publication({
+    this.deletedAt,
     required this.id,
     required this.clientMutationId,
     required this.ownerUserId,
@@ -297,6 +299,8 @@ class Publication {
     required this.updatedAt,
   });
 
+  final DateTime? deletedAt;
+  bool get isDeleted => deletedAt != null;
   final String id;
   final String clientMutationId;
   final String ownerUserId;
@@ -347,6 +351,7 @@ class Publication {
   }
 
   Publication copyWith({
+    DateTime? deletedAt,
     String? title,
     String? districtUbigeo,
     double? approxLat,
@@ -367,6 +372,7 @@ class Publication {
     DateTime? updatedAt,
   }) {
     return Publication(
+      deletedAt: deletedAt ?? this.deletedAt,
       id: id,
       clientMutationId: clientMutationId,
       ownerUserId: ownerUserId,
@@ -406,6 +412,7 @@ class Publication {
   }
 
   Map<String, Object?> toSqlMap() => {
+    'deleted_at': deletedAt?.toUtc().toIso8601String(),
     'id': id,
     'client_mutation_id': clientMutationId,
     'owner_user_id': ownerUserId,
@@ -439,6 +446,7 @@ class Publication {
 
   factory Publication.fromSqlMap(Map<String, Object?> map) {
     return Publication(
+      deletedAt: DateTime.tryParse(map['deleted_at'] as String? ?? ''),
       id: (map['id'] as String?) ?? '',
       clientMutationId: (map['client_mutation_id'] as String?) ?? '',
       ownerUserId: (map['owner_user_id'] as String?) ?? 'public',
