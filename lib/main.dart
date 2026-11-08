@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -5,6 +7,7 @@ import 'core/accessibility/accessibility_controller.dart';
 import 'core/accessibility/text_input_support.dart';
 import 'core/config/app_config.dart';
 import 'core/database/local_sqlite_database.dart';
+import 'core/notifications/push_notification_service.dart';
 import 'core/state/app_controller.dart';
 import 'core/sync/outbox_sync_service.dart';
 import 'core/sync/supabase_remote_gateway.dart';
@@ -14,6 +17,7 @@ import 'features/auth/auth_and_onboarding_screen.dart';
 import 'features/auth/password_recovery_screen.dart';
 import 'features/chat/chat_screens.dart';
 import 'features/chat/emergency_group_chat_screen.dart';
+import 'features/chat/private_message_push_widgets.dart';
 import 'features/emergencies/emergency_hub_screen.dart';
 import 'features/favors/favor_detail_screen.dart';
 import 'features/favors/favors_screen.dart';
@@ -27,6 +31,7 @@ import 'features/shared/civic_widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  unawaited(PushNotificationService.instance.initialize());
 
   if (AppConfig.hasSupabaseCredentials) {
     try {
@@ -106,9 +111,13 @@ class Conecta2App extends StatelessWidget {
               child: child ?? const SizedBox.shrink(),
             );
           },
-          home: _MainCivicShell(
+          home: PrivateMessagePushListener(
+            key: ObjectKey(appController),
             controller: appController,
-            accessibilityController: accessibilityController,
+            child: _MainCivicShell(
+              controller: appController,
+              accessibilityController: accessibilityController,
+            ),
           ),
         );
       },
@@ -205,7 +214,10 @@ class _MainCivicShell extends StatelessWidget {
       case AppSection.chatLista:
         return ChatListScreen(controller: controller);
       case AppSection.chatConversacion:
-        return ChatConversationScreen(controller: controller);
+        return ChatConversationScreen(
+          key: ValueKey(controller.selectedConversation?.id),
+          controller: controller,
+        );
       case AppSection.misActividades:
         return MyActivitiesAndProfileScreen(controller: controller);
       case AppSection.autenticacion:
