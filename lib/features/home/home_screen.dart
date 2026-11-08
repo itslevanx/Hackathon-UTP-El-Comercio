@@ -286,12 +286,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          c.lastSyncTimestamp == null
-              ? 'Sin confirmación reciente del servidor'
-              : 'Última actualización: ${c.lastSyncTimestamp!.toLocal()}',
-          style: const TextStyle(fontSize: 16),
-        ),
         if (pendingCount > 0)
           Text('$pendingCount envío(s) pendiente(s). Aún NO comunicados.'),
         OutlinedButton.icon(
