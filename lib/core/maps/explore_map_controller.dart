@@ -115,7 +115,9 @@ class ExploreMapController extends ChangeNotifier {
       loading = false;
       notifyListeners();
       unawaited(loadLocal());
+      return;
     }
+    unawaited(loadLocal());
   }
 
   void setFilter(MapRecordFilter next) {

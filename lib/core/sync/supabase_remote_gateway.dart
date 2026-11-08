@@ -481,6 +481,8 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
           'publication',
           'publication_status',
           'publication_location',
+          'publication_edit',
+          'publication_delete',
           'recommendation',
           'help_offer',
           'conversation',
@@ -542,6 +544,22 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
             return RemoteSyncResult(
               status: SyncStatus.confirmado,
               confirmedVersion: row['version'] as int,
+            );
+          case 'publication_edit':
+          case 'publication_delete':
+            final version = await _client.rpc(
+              'mutate_publication',
+              params: {
+                'p_id': operation.entityId,
+                'p_expected_version': operation.expectedVersion,
+                'p_operation_id': operation.operationId,
+                'p_delete': operation.entityType == 'publication_delete',
+                'p_changes': payload,
+              },
+            );
+            return RemoteSyncResult(
+              status: SyncStatus.confirmado,
+              confirmedVersion: version as int,
             );
           case 'publication_location':
             final version = await _client.rpc(
@@ -650,7 +668,13 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
       status: SyncStatus.confirmado,
       confirmedVersion:
           operation.expectedVersion +
-          (operation.entityType == 'publication_location' ? 1 : 0),
+          (const [
+                'publication_location',
+                'publication_edit',
+                'publication_delete',
+              ].contains(operation.entityType)
+              ? 1
+              : 0),
     );
   }
 
@@ -748,6 +772,89 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     );
     _realtimeController.add(message);
     return message;
+  }
+
+  Future<List<Publication>> fetchFeedPage({
+    String? districtUbigeo,
+    DateTime? beforeTime,
+    String? beforeId,
+    int limit = 30,
+  }) async {
+    if (isTestDouble) return const [];
+    _requireRealBackend();
+    final rows = await _client.rpc(
+      'neighborhood_feed',
+      params: {
+        'p_district': districtUbigeo ?? '',
+        'p_before_time': beforeTime?.toUtc().toIso8601String(),
+        'p_before_id': beforeId,
+        'p_limit': limit,
+      },
+    ) as List<dynamic>;
+    return rows.map((raw) {
+      final row = raw as Map<String, dynamic>;
+      return Publication.fromSqlMap({
+        ...Map<String, Object?>.from(row['publication'] as Map),
+        'author_alias': row['author_alias'],
+        'owner_user_id': row['publication']['author_id'],
+        'sync_status': 'confirmado',
+      });
+    }).toList();
+  }
+
+  Future<List<Publication>> fetchCachedPublicationUpdates(
+    List<Publication> cached,
+  ) async {
+    if (isTestDouble || cached.isEmpty) return const [];
+    _requireRealBackend();
+    final byId = {for (final p in cached) p.id: p};
+    final result = <Publication>[];
+    for (var i = 0; i < cached.length; i += 100) {
+      final ids = cached.skip(i).take(100).map((p) => p.id).toList();
+      final versions = await _client
+          .from('publications')
+          .select('id,version')
+          .inFilter('id', ids)
+          .isFilter('deleted_at', null);
+      final changed = versions
+          .where((r) => (r['version'] as int) > byId[r['id']]!.version)
+          .map((r) => r['id'] as String)
+          .toList();
+      if (changed.isEmpty) continue;
+      final rows = await _client
+          .from('publications')
+          .select()
+          .inFilter('id', changed)
+          .isFilter('deleted_at', null);
+      result.addAll(
+        rows.map(
+          (row) => Publication.fromSqlMap({
+            ...Map<String, Object?>.from(row),
+            'author_alias': byId[row['id']]!.authorAlias,
+            'owner_user_id': row['author_id'],
+            'sync_status': 'confirmado',
+          }),
+        ),
+      );
+    }
+    return result;
+  }
+
+  Future<List<Map<String, Object?>>> fetchPublicationTombstones(
+    List<String> ids,
+  ) async {
+    if (isTestDouble || ids.isEmpty) return const [];
+    _requireRealBackend();
+    final result = <Map<String, Object?>>[];
+    for (var i = 0; i < ids.length; i += 100) {
+      final part = ids.skip(i).take(100).toList();
+      final rows = await _client
+          .from('publication_tombstones')
+          .select('publication_id,deleted_at')
+          .inFilter('publication_id', part);
+      result.addAll(rows.map((row) => Map<String, Object?>.from(row)));
+    }
+    return result;
   }
 
   Future<List<Publication>> fetchOwnMapPublications() async {

@@ -1,3 +1,4 @@
+import '../publish/publication_owner_actions.dart';
 import '../../core/accessibility/text_input_support.dart';
 
 import 'package:flutter/material.dart';
@@ -150,6 +151,7 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          PublicationOwnerActions(controller: c, publication: srv),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(

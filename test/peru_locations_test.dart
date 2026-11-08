@@ -489,7 +489,8 @@ void main() {
       ..remove('share_service_location')
       ..remove('service_lat')
       ..remove('service_lng')
-      ..remove('service_address');
+      ..remove('service_address')
+        ..remove('deleted_at');
     await oldDb.insert('publications_local', oldPublication);
     final originalPayload = jsonEncode(oldPublication);
     await oldDb.insert(

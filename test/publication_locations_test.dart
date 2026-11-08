@@ -312,7 +312,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
-  test('SQLite v2 migra a v3 y admite ubicación en borradores', () async {
+  test('SQLite v2 migra y admite ubicación en borradores', () async {
     ffi.sqfliteFfiInit();
     ffi.databaseFactory = ffi.databaseFactoryFfi;
     final folder = await Directory.systemTemp.createTemp('nexo-location-v2');

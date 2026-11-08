@@ -34,6 +34,7 @@ class OutboxSyncService {
   final LocalSqliteDatabase database;
   final RemoteBackendGateway remoteGateway;
 
+  bool networkAvailable = true;
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
 
@@ -52,7 +53,7 @@ class OutboxSyncService {
       );
     }
 
-    if (_isSyncing) {
+    if (_isSyncing || !networkAvailable) {
       final currentOps = await database.listOutboxForUser(activeUserId);
       return OutboxSyncSummary(
         confirmedCount: 0,
@@ -69,7 +70,10 @@ class OutboxSyncService {
 
     try {
       final operations = await database.listOutboxForUser(activeUserId);
+      final blocked = <String>{};
       for (final op in operations) {
+        if (!networkAvailable) break;
+        if (blocked.contains(op.entityId)) continue;
         if (onlyOperationId != null && op.operationId != onlyOperationId) {
           continue;
         }
@@ -79,7 +83,10 @@ class OutboxSyncService {
         }
 
         // Un conflicto necesita revisión explícita, no un reintento automático.
-        if (op.syncStatus == SyncStatus.conflicto) continue;
+        if (op.syncStatus == SyncStatus.conflicto) {
+          blocked.add(op.entityId);
+          continue;
+        }
         // Paso 1: marcar como `enviando`
         await database.updateOutboxAndEntityStatus(
           operationId: op.operationId,
@@ -90,7 +97,9 @@ class OutboxSyncService {
         // Paso 2: enviar al gateway remoto con llave de idempotencia
         RemoteSyncResult result;
         try {
-          result = await remoteGateway.pushOutboxOperation(op);
+          result = await remoteGateway
+              .pushOutboxOperation(op)
+              .timeout(const Duration(seconds: 15));
         } catch (_) {
           result = const RemoteSyncResult(
             status: SyncStatus.error,
@@ -108,6 +117,7 @@ class OutboxSyncService {
           confirmedServerVersion: result.confirmedVersion,
         );
 
+        if (result.status != SyncStatus.confirmado) blocked.add(op.entityId);
         switch (result.status) {
           case SyncStatus.confirmado:
             confirmed++;

@@ -87,6 +87,7 @@ class SqfliteStoreEngine implements LocalStoreEngine {
       approx_lat REAL,
       approx_lng REAL,
       share_resource_consent INTEGER NOT NULL DEFAULT 0,
+      deleted_at TEXT,
       share_service_location INTEGER NOT NULL DEFAULT 0,
       service_lat REAL,
       service_lng REAL,
@@ -280,7 +281,7 @@ class SqfliteStoreEngine implements LocalStoreEngine {
     final fullPath = p.join(databasesPath, databaseFileName);
     _db = await openDatabase(
       fullPath,
-      version: 3,
+      version: 4,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) await upgradeLocationTables(db);
         if (oldVersion >= 2 && oldVersion < 3) {
@@ -296,6 +297,16 @@ class SqfliteStoreEngine implements LocalStoreEngine {
           await db.execute(
             "ALTER TABLE publications_local ADD COLUMN service_address TEXT NOT NULL DEFAULT ''",
           );
+        }
+        if (oldVersion >= 2 && oldVersion < 4) {
+          final columns = await db.rawQuery(
+            'PRAGMA table_info(publications_local)',
+          );
+          if (!columns.any((row) => row['name'] == 'deleted_at')) {
+            await db.execute(
+              'ALTER TABLE publications_local ADD COLUMN deleted_at TEXT',
+            );
+          }
         }
         if (oldVersion < 3) {
           final columns = await db.rawQuery('PRAGMA table_info(drafts_local)');
@@ -1102,6 +1113,114 @@ class LocalSqliteDatabase {
 
   /// Actualiza el estado de una publicación validando permisos de autor y
   /// transiciones permitidas (`abierta`, `en_coordinacion`, `resuelta`, `cancelada`).
+  Future<Publication> editPublication({
+    required String publicationId,
+    required String actingUserId,
+    required Map<String, Object?> changes,
+    bool delete = false,
+  }) async {
+    return _engine.runInTransaction((txn) async {
+      final rows = await txn.query(
+        'publications_local',
+        where: 'id = ?',
+        whereArgs: [publicationId],
+      );
+      if (rows.isEmpty) throw StateError('La publicación no existe.');
+      final current = Publication.fromSqlMap(rows.single);
+      if (current.authorId != actingUserId) {
+        throw StateError('Solo el autor puede cambiar su publicación.');
+      }
+      if (current.isDeleted) {
+        throw StateError('La publicación ya fue eliminada.');
+      }
+      final now = DateTime.now().toUtc();
+      if (delete) {
+        final pending = await txn.query(
+          'outbox_operations',
+          where: 'entity_id = ? AND owner_user_id = ?',
+          whereArgs: [publicationId, actingUserId],
+        );
+        final neverSent = pending.any(
+          (row) =>
+              row['entity_type'] == 'publication' &&
+              row['attempts'] == 0 &&
+              row['sync_status'] == 'pendiente',
+        );
+        if (neverSent) {
+          // Una creación que nunca salió del teléfono se cancela sin publicarla.
+          final cancelled = current.copyWith(
+            deletedAt: now,
+            syncStatus: SyncStatus.borrador,
+            updatedAt: now,
+          );
+          await txn.upsert('publications_local', 'id', cancelled.toSqlMap());
+          await txn.delete(
+            'outbox_operations',
+            where: 'entity_id = ? AND owner_user_id = ?',
+            whereArgs: [publicationId, actingUserId],
+          );
+          return cancelled;
+        }
+      }
+      final updated = current.copyWith(
+        title: changes['title'] as String?,
+        description: changes['description'] as String?,
+        category: changes['category'] as String?,
+        availabilityText: changes['availability_text'] as String?,
+        deletedAt: delete ? now : null,
+        version: current.version + 1,
+        syncStatus: SyncStatus.pendiente,
+        lastError: '',
+        updatedAt: now,
+      );
+      final op = OutboxOperation(
+        operationId: EntityId.create(),
+        ownerUserId: actingUserId,
+        entityType: delete ? 'publication_delete' : 'publication_edit',
+        entityId: publicationId,
+        action: 'update',
+        payloadJson: jsonEncode(
+          delete
+              ? <String, Object?>{}
+              : {
+                  'title': updated.title,
+                  'description': updated.description,
+                  'category': updated.category,
+                  'availability_text': updated.availabilityText,
+                },
+        ),
+        expectedVersion: current.version,
+        syncStatus: SyncStatus.pendiente,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await txn.upsert('publications_local', 'id', updated.toSqlMap());
+      await txn.upsert('outbox_operations', 'operation_id', op.toSqlMap());
+      return updated;
+    });
+  }
+
+  Future<void> applyPublicationTombstones(
+    List<Map<String, Object?>> rows,
+  ) async {
+    await _engine.runInTransaction((txn) async {
+      for (final row in rows) {
+        final found = await txn.query(
+          'publications_local',
+          where: 'id = ?',
+          whereArgs: [row['publication_id']],
+        );
+        if (found.isEmpty) continue;
+        final local = Publication.fromSqlMap(found.single);
+        // Una eliminación confirmada prevalece; el borrador conflictivo queda en la cola.
+        final deleted = local.copyWith(
+          deletedAt: DateTime.parse(row['deleted_at'] as String),
+        );
+        await txn.upsert('publications_local', 'id', deleted.toSqlMap());
+      }
+    });
+  }
+
   Future<Publication> transitionPublicationStatus({
     required String publicationId,
     required String actingUserId,
@@ -1179,6 +1298,7 @@ class LocalSqliteDatabase {
     final result = <Publication>[];
     for (final row in rows) {
       final pub = Publication.fromSqlMap(row);
+      if (pub.isDeleted) continue;
       // Si es una publicación no confirmada de otra cuenta local, no mostrarla
       if (!pub.syncStatus.isConfirmed &&
           pub.ownerUserId != 'public_seed' &&
@@ -1237,6 +1357,7 @@ class LocalSqliteDatabase {
         throw StateError('El servicio indicado no existe.');
       }
       final pub = Publication.fromSqlMap(pubRows.first);
+      if (pub.isDeleted) throw StateError('La publicación fue eliminada.');
       if (!pub.kind.isService) {
         throw StateError(
           'Solo se pueden recomendar oficios o servicios del directorio.',
@@ -1414,6 +1535,7 @@ class LocalSqliteDatabase {
         throw StateError('La solicitud ya no está disponible.');
       }
       final pub = Publication.fromSqlMap(pubRows.first);
+      if (pub.isDeleted) throw StateError('La publicación fue eliminada.');
       if (pub.authorId == helperId) {
         throw StateError(
           'No puedes enviar una oferta de ayuda a tu propia solicitud.',
@@ -1772,7 +1894,9 @@ class LocalSqliteDatabase {
 
       if (op.entityType == 'publication' ||
           op.entityType == 'publication_status' ||
-          op.entityType == 'publication_location') {
+          op.entityType == 'publication_location' ||
+          op.entityType == 'publication_edit' ||
+          op.entityType == 'publication_delete') {
         final pubRows = await txn.query(
           'publications_local',
           where: 'id = ?',
@@ -1866,6 +1990,7 @@ class LocalSqliteDatabase {
         if (localRows.isNotEmpty) {
           final local = Publication.fromSqlMap(localRows.first);
           if (!local.syncStatus.isConfirmed) continue;
+          if (local.isDeleted && !remote.isDeleted) continue;
         }
         await txn.upsert('publications_local', 'id', remote.toSqlMap());
       }

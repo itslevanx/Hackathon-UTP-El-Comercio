@@ -398,9 +398,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       final updated = _publications
           .where((p) => p.id == _selectedPublication!.id)
           .toList();
-      if (updated.isNotEmpty) {
-        _selectedPublication = updated.first;
-      }
+      _selectedPublication = updated.firstOrNull;
     }
 
     notifyListeners();
@@ -891,6 +889,57 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   void openConversation(ConversationThread thread) {
     _selectedConversation = thread;
     navigateTo(AppSection.chatConversacion);
+  }
+
+  Future<void> editPublication(
+    Publication publication, {
+    required String title,
+    required String description,
+    required String category,
+    String availabilityText = '',
+  }) async {
+    final changes = <String, Object?>{
+      'title': title.trim(),
+      'description': description.trim(),
+      'category': category.trim(),
+      'availability_text': availabilityText.trim(),
+    };
+    if (title.trim().length < 3 ||
+        title.trim().length > 120 ||
+        description.trim().isEmpty ||
+        description.trim().length > 1000 ||
+        category.trim().length < 2 ||
+        category.trim().length > 50 ||
+        availabilityText.trim().length > 200) {
+      throw StateError('Revisa los campos y sus límites.');
+    }
+    await _mutatePublication(publication, changes, false);
+  }
+
+  Future<void> deletePublication(Publication publication) =>
+      _mutatePublication(publication, {}, true);
+  Future<void> _mutatePublication(
+    Publication publication,
+    Map<String, Object?> changes,
+    bool deleting,
+  ) async {
+    final uid = currentUser?.id;
+    if (uid == null || publication.authorId != uid) {
+      throw StateError('Solo el autor puede cambiar su publicación.');
+    }
+    await database.editPublication(
+      publicationId: publication.id,
+      actingUserId: uid,
+      changes: changes,
+      delete: deleting,
+    );
+    if (deleting && _selectedPublication?.id == publication.id) {
+      _selectedPublication = null;
+      goHome();
+    }
+    await refreshAllLocalData();
+    await outboxSyncService.syncPendingForUser(uid);
+    if (currentUser?.id == uid) await refreshAllLocalData();
   }
 
   void _validatePublicationLocation(

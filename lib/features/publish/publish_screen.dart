@@ -49,6 +49,8 @@ class _PublishScreenState extends State<PublishScreen> {
 
   String _defaultCategoryForKind(PublicationKind kind) {
     switch (kind) {
+      case PublicationKind.anuncio:
+        return 'general';
       case PublicationKind.servicio:
         return 'electricidad';
       case PublicationKind.favorSolicitud:
@@ -250,6 +252,11 @@ class _PublishScreenState extends State<PublishScreen> {
                         key: const Key('chip_kind_favor_oferta'),
                         kind: PublicationKind.favorOferta,
                         label: 'Ofrecer favor gratuito',
+                      ),
+                      _buildKindSelectorChip(
+                        key: const Key('chip_kind_anuncio'),
+                        kind: PublicationKind.anuncio,
+                        label: 'Anuncio del barrio',
                       ),
                       _buildKindSelectorChip(
                         key: const Key('chip_kind_prestamo'),
