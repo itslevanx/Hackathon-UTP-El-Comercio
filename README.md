@@ -67,6 +67,72 @@ Vuelve a ejecutar el script si cambias `.env.local.json`. Genera `.env.ios.xccon
 
 Sin configuración remota, los simulacros siguen disponibles. La app no crea sesiones ficticias ni presenta envíos locales como confirmados.
 
+## Notificaciones móviles
+
+`PushNotificationService` centraliza el permiso de notificaciones, el registro
+de la instalación en Firebase Cloud Messaging (FCM) y la recepción de avisos con
+la app abierta o al tocar un aviso. La app funciona con normalidad si faltan
+los valores de Firebase y el registro automático está desactivado.
+
+Para conectar un proyecto Firebase, registra las apps con los identificadores
+actuales de Android e iOS y completa la configuración nativa de
+[Firebase para Flutter](https://firebase.google.com/docs/flutter/setup).
+Para iOS también se requieren la capacidad Push Notifications en Xcode y la
+[configuración de APNs](https://firebase.google.com/docs/cloud-messaging/flutter/get-started).
+Agrega los valores públicos a `.env.local.json`:
+
+| Campo | Uso |
+|---|---|
+| `FIREBASE_PROJECT_ID` | Proyecto Firebase |
+| `FIREBASE_MESSAGING_SENDER_ID` | Número de proyecto para FCM |
+| `FIREBASE_ANDROID_APP_ID`, `FIREBASE_ANDROID_API_KEY` | Configuración de la app Android |
+| `FIREBASE_IOS_APP_ID`, `FIREBASE_IOS_API_KEY` | Configuración de la app iOS |
+
+### Mensajes privados
+
+Con Firebase configurado, la opción **Activar avisos de mensajes** aparece en
+**Chats** para usuarios con sesión. El aviso es genérico y abre la conversación
+solo para la cuenta destinataria. Si ya está abierto ese chat, Realtime muestra
+el mensaje directamente.
+
+Para habilitar el envío en Supabase, aplica la migración
+`20261108170000_private_message_push.sql`. La cola se llena al guardar un
+mensaje privado y las instalaciones quedan vinculadas a la sesión de Supabase.
+Al eliminar la sesión o desactivar los avisos, se elimina su registro y su cola.
+
+Despliega la función con `supabase functions deploy private-message-push --no-verify-jwt`.
+Configura los secretos de la función `FCM_SERVICE_ACCOUNT_JSON` con la cuenta
+de servicio autorizada para enviar mediante FCM y `PRIVATE_PUSH_WORKER_SECRET`
+con un valor aleatorio de alta entropía. Guarda ese mismo valor en Vault con el
+nombre `private_push_worker_secret` y la URL del proyecto como `project_url`.
+Las credenciales privadas quedan en el servidor y en las consolas correspondientes.
+
+Con `pg_cron` y `pg_net` habilitados, programa el procesamiento de la cola:
+
+```sql
+select cron.schedule(
+  'private-message-push',
+  '15 seconds',
+  $$
+  select net.http_post(
+    url := (select decrypted_secret from vault.decrypted_secrets
+            where name = 'project_url') || '/functions/v1/private-message-push',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-push-worker-secret',
+      (select decrypted_secret from vault.decrypted_secrets
+       where name = 'private_push_worker_secret')
+    ),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+  $$
+);
+```
+
+Comprueba el flujo con dos cuentas, activando el aviso en el teléfono del
+destinatario y dejando Conecta2 en segundo plano antes de enviar el mensaje.
+
 ## Mapas CARTO
 
 Desde Inicio, **Explorar mapa** permite consultar servicios, favores, recursos y avisos, filtrar por tipo, categoría y UBIGEO, seleccionar marcadores y abrir sus registros. El mapa del directorio y el de emergencias reutilizan el mismo componente. Las agrupaciones reúnen puntos cercanos en pantalla; la lista permite abrir un registro directamente.
