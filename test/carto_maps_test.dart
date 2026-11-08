@@ -653,6 +653,44 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('Seleccionar pines abre los detalles sobre el mapa', (
+    tester,
+  ) async {
+    final c = await app();
+    addTearDown(c.dispose);
+    await c.database.mergeRemotePublications([
+      pub('servicio-pin'),
+      pub('emergencia-pin', kind: PublicationKind.emergenciaSolicitud),
+    ]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ExploreMapScreen(controller: c)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final map = tester.widget<NeighborhoodMap>(find.byType(NeighborhoodMap));
+    for (final id in ['servicio-pin', 'emergencia-pin']) {
+      map.onSelect(map.records.singleWhere((record) => record.id == 'pub:$id'));
+      await tester.pumpAndSettle();
+      final dialog = find.byKey(const Key('map_record_detail'));
+      expect(
+        find.descendant(of: dialog, matching: find.text('Registro $id')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: dialog,
+          matching: find.text('Descripción de prueba'),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cerrar'));
+      await tester.pumpAndSettle();
+      expect(dialog, findsNothing);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
 
 class _MemoryTiles extends TileProvider {

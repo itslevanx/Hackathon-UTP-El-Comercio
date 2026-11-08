@@ -270,7 +270,7 @@ class _FavorDetailScreenState extends State<FavorDetailScreen> {
                 ],
               ),
             )
-          else
+          else if (!fav.isGuestReport)
             // Clic 3 desde Inicio: Nota opcional y `Enviar oferta de ayuda`
             Container(
               padding: const EdgeInsets.all(16),
@@ -368,61 +368,65 @@ class _FavorDetailScreenState extends State<FavorDetailScreen> {
               ),
             ),
 
-          const SizedBox(height: 16),
-          Text(
-            'Ofertas de ayuda registradas (${_offers.length}):',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.textPrimary,
+          if (fav.isGuestReport)
+            const Text('Reporte de invitado sin contacto privado.'),
+          if (!fav.isGuestReport) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Ofertas de ayuda registradas (${_offers.length}):',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textPrimary,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          if (_offers.isEmpty)
-            const Text(
-              'Aún no hay ofertas registradas. ¡Sé el primer vecino en apoyar!',
-              style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
-            )
-          else
-            for (final off in _offers)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceCard,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.borderSoft),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            off.helperAlias,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.actionGreen,
+            const SizedBox(height: 8),
+            if (_offers.isEmpty)
+              const Text(
+                'Aún no hay ofertas registradas. ¡Sé el primer vecino en apoyar!',
+                style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
+              )
+            else
+              for (final off in _offers)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceCard,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.borderSoft),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              off.helperAlias,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.actionGreen,
+                              ),
                             ),
-                          ),
-                          SyncStatusBadge(status: off.syncStatus),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        off.note,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: AppTheme.textPrimary,
+                            SyncStatusBadge(status: off.syncStatus),
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Text(
+                          off.note,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+          ],
         ],
       ),
     );

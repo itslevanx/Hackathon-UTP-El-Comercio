@@ -70,7 +70,6 @@ class ExploreMapController extends ChangeNotifier {
   MapRecordFilter filter = MapRecordFilter.todos;
   String? category;
   LatLng? center;
-  NeighborhoodMapRecord? selected;
   bool loading = false;
   bool capped = false;
   String? notice;
@@ -111,7 +110,6 @@ class ExploreMapController extends ChangeNotifier {
       _owner = app.currentUser?.id;
       _request++;
       _records = [];
-      selected = null;
       loading = false;
       notifyListeners();
       unawaited(loadLocal());
@@ -123,21 +121,18 @@ class ExploreMapController extends ChangeNotifier {
   void setFilter(MapRecordFilter next) {
     filter = next;
     category = null;
-    selected = null;
     notifyListeners();
     unawaited(refresh());
   }
 
   void setCategory(String? next) {
     category = next;
-    selected = null;
     notifyListeners();
     unawaited(refresh());
   }
 
   Future<void> setZone(PeruLocationSelection next) async {
     zone = app.locationCatalog.normalize(next);
-    selected = null;
     final district = app.locationCatalog.district(zone.districtCode);
     center = approximateMapPoint(district?.capitalLat, district?.capitalLng);
     if (!hasAdministrativeFilter) {
@@ -150,16 +145,10 @@ class ExploreMapController extends ChangeNotifier {
     await refresh();
   }
 
-  void select(NeighborhoodMapRecord record) {
-    selected = record;
-    notifyListeners();
-  }
-
   void centerOn(LatLng point) {
     _request++;
     loading = false;
     zone = const PeruLocationSelection.empty();
-    selected = null;
     center = approximateMapPoint(point.latitude, point.longitude);
     notifyListeners();
     unawaited(loadLocal());
@@ -212,10 +201,6 @@ class ExploreMapController extends ChangeNotifier {
     ];
     capped = candidates.length > 200;
     _records = candidates;
-    if (selected != null) {
-      final matches = _records.where((r) => r.id == selected!.id);
-      selected = matches.firstOrNull;
-    }
     notifyListeners();
   }
 

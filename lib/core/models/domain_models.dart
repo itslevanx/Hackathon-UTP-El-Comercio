@@ -266,6 +266,8 @@ class UserProfile {
 
 /// Publicación unificada (Servicio del directorio, Favor solidario o Reporte de emergencia).
 class Publication {
+  static const guestOwnerId = 'anonymous';
+
   const Publication({
     this.deletedAt,
     required this.id,
@@ -305,6 +307,8 @@ class Publication {
   final String clientMutationId;
   final String ownerUserId;
   final String authorId;
+  bool get isGuestReport =>
+      authorId.isEmpty && kind == PublicationKind.emergenciaSolicitud;
   final String authorAlias;
   final PublicationKind kind;
   final String category;
@@ -451,7 +455,11 @@ class Publication {
       clientMutationId: (map['client_mutation_id'] as String?) ?? '',
       ownerUserId: (map['owner_user_id'] as String?) ?? 'public',
       authorId: (map['author_id'] as String?) ?? '',
-      authorAlias: (map['author_alias'] as String?) ?? 'Vecino',
+      authorAlias:
+          map['author_id'] == null &&
+              map['kind'] == PublicationKind.emergenciaSolicitud.dbValue
+          ? 'Invitado'
+          : (map['author_alias'] as String?) ?? 'Vecino',
       kind: PublicationKind.fromDb(
         (map['kind'] as String?) ?? 'favor_solicitud',
       ),

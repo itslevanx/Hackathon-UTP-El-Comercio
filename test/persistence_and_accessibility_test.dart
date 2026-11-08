@@ -46,7 +46,7 @@ void main() {
     );
     await controller.initialize(startWithActiveSession: false);
     controller.openQuickPublish(
-      presetKind: PublicationKind.emergenciaSolicitud,
+      presetKind: PublicationKind.favorSolicitud,
       lockTypeForTwoClickFlow: true,
     );
     expect(controller.currentSection, AppSection.autenticacion);
@@ -61,7 +61,7 @@ void main() {
     remote.events.add(null);
     await restored.future.timeout(const Duration(seconds: 2));
     expect(controller.currentUser?.id, _confirmedProfile.id);
-    expect(controller.publishPresetKind, PublicationKind.emergenciaSolicitud);
+    expect(controller.publishPresetKind, PublicationKind.favorSolicitud);
     expect(await db.listOutboxForUser(_confirmedProfile.id), isEmpty);
     controller.dispose();
     await remote.events.close();

@@ -15,6 +15,7 @@ import 'package:hackathon_utp_el_comercio/main.dart';
 
 Future<AppController> _createInitializedTestController({
   bool offline = false,
+  bool signedIn = true,
 }) async {
   final db = LocalSqliteDatabase(engine: InMemoryTransactionalStoreEngine());
   final gateway = SupabaseRemoteGateway(forceSupabaseAvailable: false)
@@ -25,7 +26,7 @@ Future<AppController> _createInitializedTestController({
     remoteGateway: gateway,
     outboxSyncService: outbox,
   );
-  await controller.initialize(startWithActiveSession: true);
+  await controller.initialize(startWithActiveSession: signedIn);
   return controller;
 }
 
@@ -177,6 +178,75 @@ void main() {
         expect(find.text('Reporte comunicado a la comunidad'), findsOneWidget);
       },
     );
+
+    testWidgets('Un invitado puede reportar y sincronizar al reconectar', (
+      tester,
+    ) async {
+      final controller = await _createInitializedTestController(
+        offline: true,
+        signedIn: false,
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        NexoNeighborhoodApp(
+          appController: controller,
+          accessibilityController: AccessibilityController(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('btn_home_reportar_emergencia')));
+      await tester.pumpAndSettle();
+      expect(controller.currentSection, AppSection.publicarRapido);
+      await tester.enterText(
+        find.byKey(const Key('input_publish_title')),
+        'Árbol caído en la avenida',
+      );
+      await tester.enterText(
+        find.byKey(const Key('input_publish_description')),
+        'Hay ramas que bloquean el paso.',
+      );
+      final send = find.byKey(const Key('btn_submit_publication'));
+      await tester.ensureVisible(send);
+      await tester.pumpAndSettle();
+      await tester.tap(send);
+      await tester.pumpAndSettle();
+
+      final report = controller.lastSubmittedPublication!;
+      expect(report.isGuestReport, isTrue);
+      expect(report.syncStatus, SyncStatus.pendiente);
+      expect(controller.userOutbox.single.entityId, report.id);
+      await controller.setOfflineMode(false);
+      await tester.pumpAndSettle();
+      expect(controller.isAuthenticated, isFalse);
+      expect(controller.userOutbox, isEmpty);
+      expect(find.text('Reporte comunicado a la comunidad'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('Perfil muestra el formulario solo al cerrar sesión', (
+      tester,
+    ) async {
+      final controller = await _createInitializedTestController();
+      addTearDown(controller.dispose);
+      controller.navigateTo(AppSection.autenticacion);
+      await tester.pumpWidget(
+        NexoNeighborhoodApp(
+          appController: controller,
+          accessibilityController: AccessibilityController(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final email = find.byKey(const Key('input_auth_email'));
+      final signOut = find.byKey(const Key('btn_sign_out'));
+      expect(email, findsNothing);
+      expect(signOut, findsOneWidget);
+      await tester.tap(signOut);
+      await tester.pumpAndSettle();
+      controller.navigateTo(AppSection.autenticacion);
+      await tester.pumpAndSettle();
+      expect(email, findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
 
     testWidgets(
       'Tarea 3 (Publicar servicio o favor): Inicio -> Publicar servicio o favor (Clic 1) -> seleccionar tipo (Clic 2) -> escribir -> Publicar en mi barrio (Clic 3)',
@@ -340,10 +410,34 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(clickCount, equals(3));
+        final publish = find.byKey(const Key('btn_recomendar_servicio'));
+        expect(tester.widget<ElevatedButton>(publish).onPressed, isNull);
         expect(
           find.textContaining('Tu opinión vecinal fue registrada'),
-          findsOneWidget,
+          findsNothing,
         );
+        final edit = find.byKey(const Key('btn_modificar_recomendacion'));
+        final remove = find.byKey(const Key('btn_retirar_recomendacion'));
+        final comment = find.byKey(
+          const Key('input_service_recommendation_comment'),
+        );
+        await tester.enterText(comment, 'Opinión actualizada.');
+        await tester.ensureVisible(edit);
+        await tester.pumpAndSettle();
+        await tester.tap(edit);
+        await tester.pumpAndSettle();
+        final recommendations = await controller.database
+            .listRecommendationsForService(controller.selectedPublication!.id);
+        final mine = recommendations.singleWhere(
+          (recommendation) =>
+              recommendation.userId == controller.currentUser!.id,
+        );
+        expect(mine.comment, 'Opinión actualizada.');
+        await tester.ensureVisible(remove);
+        await tester.pumpAndSettle();
+        await tester.tap(remove);
+        await tester.pumpAndSettle();
+        expect(tester.widget<ElevatedButton>(publish).onPressed, isNotNull);
       },
     );
 
