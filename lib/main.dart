@@ -13,6 +13,7 @@ import 'features/activities/my_activities_and_profile_screen.dart';
 import 'features/auth/auth_and_onboarding_screen.dart';
 import 'features/auth/password_recovery_screen.dart';
 import 'features/chat/chat_screens.dart';
+import 'features/chat/emergency_group_chat_screen.dart';
 import 'features/emergencies/emergency_hub_screen.dart';
 import 'features/favors/favor_detail_screen.dart';
 import 'features/favors/favors_screen.dart';
@@ -58,17 +59,16 @@ Future<void> main() async {
   await appController.initialize(startWithActiveSession: true);
 
   runApp(
-    NexoNeighborhoodApp(
+    Conecta2App(
       appController: appController,
       accessibilityController: accessibilityController,
     ),
   );
 }
 
-/// Aplicación principal comunitaria (nombre provisional centralizado en
-/// [AppConfig.provisionalAppName]).
-class NexoNeighborhoodApp extends StatelessWidget {
-  const NexoNeighborhoodApp({
+/// Aplicación principal de Conecta2.
+class Conecta2App extends StatelessWidget {
+  const Conecta2App({
     super.key,
     required this.appController,
     required this.accessibilityController,
@@ -90,8 +90,7 @@ class NexoNeighborhoodApp extends StatelessWidget {
 
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          title:
-              '${AppConfig.provisionalAppName} — ${AppConfig.provisionalSubtitle}',
+          title: '${AppConfig.appName} — ${AppConfig.subtitle}',
           theme: AppTheme.buildTheme(reduceMotion: reduceMotion),
           builder: (context, child) {
             final currentMedia = MediaQuery.of(context);
@@ -161,7 +160,7 @@ class _MainCivicShell extends StatelessWidget {
 
     return Scaffold(
       appBar: CivicAppBar(
-        title: AppConfig.provisionalAppName,
+        title: AppConfig.appName,
         height:
             (MediaQuery.textScalerOf(context).scale(1) > 1.3 ? 164 : 100) +
             (showBack ? 56 : 0),
@@ -201,6 +200,8 @@ class _MainCivicShell extends StatelessWidget {
         return ExploreMapScreen(controller: controller);
       case AppSection.emergencias:
         return EmergencyHubScreen(controller: controller);
+      case AppSection.chatEmergencia:
+        return EmergencyGroupChatScreen(controller: controller);
       case AppSection.chatLista:
         return ChatListScreen(controller: controller);
       case AppSection.chatConversacion:
@@ -230,6 +231,11 @@ class _MainCivicShell extends StatelessWidget {
         Icons.person_outline,
         () => controller.navigateTo(AppSection.misActividades),
       ),
+      (
+        'Chats',
+        Icons.chat_bubble_outline,
+        () => controller.navigateTo(AppSection.chatLista),
+      ),
     ];
     return SafeArea(
       top: false,
@@ -241,6 +247,7 @@ class _MainCivicShell extends StatelessWidget {
             for (final destination in destinations)
               Expanded(
                 child: TextButton(
+                  key: ValueKey('nav_${destination.$1.toLowerCase()}'),
                   onPressed: destination.$3,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,

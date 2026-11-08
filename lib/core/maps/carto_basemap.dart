@@ -185,7 +185,7 @@ class CartoTileProvider extends TileProvider {
       );
       request.headers.addAll({
         ..._identity,
-        'User-Agent': 'NEXO/1.0 flutter_map/8.3.2',
+        'User-Agent': 'Conecta2/1.0 flutter_map/8.3.2',
       });
       final response = await _client
           .send(request)

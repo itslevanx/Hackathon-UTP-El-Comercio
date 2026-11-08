@@ -128,6 +128,32 @@ class _FavorDetailScreenState extends State<FavorDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           PublicationOwnerActions(controller: c, publication: fav),
+          if (fav.kind.isEmergency) ...[
+            FilledButton.icon(
+              key: const Key('open_emergency_group'),
+              onPressed: () async {
+                try {
+                  await c.openEmergencyGroup(fav);
+                } catch (_) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Inicia sesión y elige el distrito de esta emergencia en tu perfil para participar.',
+                        ),
+                      ),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.groups_outlined),
+              label: const Text('Chat grupal de la emergencia'),
+            ),
+            const Text(
+              'Visible para vecinos del distrito. Las conversaciones privadas se mantienen aparte.',
+            ),
+            const SizedBox(height: 12),
+          ],
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(

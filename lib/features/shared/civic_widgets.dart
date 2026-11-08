@@ -8,7 +8,7 @@ import '../../core/maps/explore_map_controller.dart';
 import '../maps/neighborhood_map.dart';
 
 /// Cabecera cívica accesible presente en toda la app:
-/// - Nombre provisional centralizado (`NEXO`)
+/// - Nombre de la aplicación centralizado
 /// - Zona barrial activa
 /// - Control `A / A+` de tamaño de letra (`>= 48x48dp`)
 /// - Acceso a perfil / sesión (`>= 48x48dp`)

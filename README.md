@@ -1,6 +1,6 @@
-# NEXO — Tu comunidad, más cerca
+# Conecta2 — Tu comunidad, más cerca
 
-Aplicación vecinal para el Hackathon UTP × El Comercio. Permite encontrar servicios cercanos, recomendar oficios, pedir u ofrecer ayuda y coordinar recursos durante una emergencia. NEXO es un nombre provisional.
+Aplicación vecinal para el Hackathon UTP × El Comercio. Permite encontrar servicios cercanos, recomendar oficios, pedir u ofrecer ayuda y coordinar recursos durante una emergencia.
 
 El escenario de demostración es Pueblo Libre, Lima. Los personajes del prototipo y los simulacros son ficticios.
 
@@ -8,7 +8,8 @@ El escenario de demostración es Pueblo Libre, Lima. Los personajes del prototip
 
 - Directorio de servicios con recomendaciones de vecinos y búsqueda por cercanía.
 - Publicaciones de favores, préstamos, donaciones y necesidades de emergencia.
-- Conversaciones privadas entre los participantes de una solicitud.
+- Pestaña Chats con conversaciones privadas y grupos de las emergencias que hayas abierto.
+- Cada emergencia tiene un grupo para los vecinos registrados del mismo distrito. Los mensajes privados se mantienen separados; al cerrar la emergencia, su grupo queda para lectura.
 - Borradores y envíos pendientes en SQLite, con reintentos y control de conflictos.
 - Simulacros de sismo, lluvias y corte de servicios: reportar, coordinar ayuda, perder conexión y resolver una actividad sin enviar avisos reales.
 - Texto ampliable, contraste alto, botones grandes y recorridos principales de hasta tres clics desde Inicio para usuarios con sesión activa. Escribir en los formularios no cuenta como clic.
@@ -45,7 +46,6 @@ Crea `.env.local.json` en la raíz con la configuración pública de tu proyecto
 {
   "SUPABASE_URL": "https://tu-proyecto.supabase.co",
   "SUPABASE_ANON_KEY": "tu-clave-publishable",
-  "APP_PROVISIONAL_NAME": "NEXO",
   "CARTO_API_KEY": "tu-clave-basemaps"
 }
 ```
@@ -194,3 +194,15 @@ supabase/          Migraciones, datos de ejemplo y pruebas SQL
 test/              Pruebas de lógica, persistencia e interfaz
 protipo/           Prototipo web y referencias visuales
 ```
+
+## Identidad e iconos
+
+El nombre visible es Conecta2. El icono maestro está en `assets/branding/conecta2-icon.svg`; `tools/generate_app_icons.py` genera los tamaños de iOS, Android, macOS, Windows y web con Pillow y resvg-py. Los identificadores de aplicación y nombres de las bases locales se conservan para mantener las instalaciones y sus datos.
+
+## Grupos de emergencia
+
+Desde el detalle de una emergencia puedes entrar a su chat grupal. El acceso se valida mediante RLS: autor y vecinos autenticados del mismo distrito UBIGEO. No se publican automáticamente conversaciones privadas ni coordenadas de los participantes.
+
+Los mensajes se guardan primero en SQLite y se sincronizan con una clave de idempotencia. Sin conexión, el historial consultado permanece disponible y los mensajes nuevos muestran su estado pendiente hasta recibir confirmación. Los grupos abiertos aparecen en Chats. La caché está separada por cuenta; SQLite se migra de la versión 4 a la 5 sin reemplazar las tablas anteriores.
+
+La migración `20261108071749_emergency_group_chat.sql` añade mensajes de grupo, políticas RLS, RPC de envío e historial y actualizaciones Realtime. La verificación transaccional está en `supabase/tests/emergency_group_chat_verification.sql` y revierte todos sus datos de prueba.

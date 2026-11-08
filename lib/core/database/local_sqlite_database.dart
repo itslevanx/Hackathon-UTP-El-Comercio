@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 import '../config/app_config.dart';
 import '../models/domain_models.dart';
 import '../models/entity_id.dart';
+import '../models/emergency_group_message.dart';
 
 /// Contrato de motor transaccional SQLite para permitir ejecución nativa con
 /// `sqflite` en Android/iOS y pruebas deterministas en entornos sin canal nativo.
@@ -49,7 +50,19 @@ class SqfliteStoreEngine implements LocalStoreEngine {
   final String databaseFileName;
   Database? _db;
 
+  static const groupMessagesSchema = """
+    CREATE TABLE IF NOT EXISTS emergency_group_messages_local (
+      cache_id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, id TEXT NOT NULL,
+      client_mutation_id TEXT NOT NULL, publication_id TEXT NOT NULL,
+      sender_id TEXT NOT NULL, sender_alias TEXT NOT NULL, body TEXT NOT NULL,
+      created_at TEXT NOT NULL, sync_status TEXT NOT NULL, last_error TEXT NOT NULL DEFAULT ''
+    )
+  """;
+  static const groupMessagesIndex =
+      'CREATE INDEX IF NOT EXISTS idx_group_messages_local ON emergency_group_messages_local(owner_user_id,publication_id,created_at,id)';
   static const List<String> schemaStatements = [
+    groupMessagesSchema,
+    groupMessagesIndex,
     '''
     CREATE TABLE IF NOT EXISTS profiles_local (
       id TEXT PRIMARY KEY,
@@ -281,8 +294,12 @@ class SqfliteStoreEngine implements LocalStoreEngine {
     final fullPath = p.join(databasesPath, databaseFileName);
     _db = await openDatabase(
       fullPath,
-      version: 4,
+      version: 5,
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 5) {
+          await db.execute(groupMessagesSchema);
+          await db.execute(groupMessagesIndex);
+        }
         if (oldVersion < 2) await upgradeLocationTables(db);
         if (oldVersion >= 2 && oldVersion < 3) {
           await db.execute(
@@ -1159,6 +1176,34 @@ class LocalSqliteDatabase {
             where: 'entity_id = ? AND owner_user_id = ?',
             whereArgs: [publicationId, actingUserId],
           );
+          final messages = await txn.query(
+            'emergency_group_messages_local',
+            where: 'owner_user_id = ? AND publication_id = ?',
+            whereArgs: [actingUserId, publicationId],
+          );
+          for (final message in messages) {
+            final draft = FormDraft(
+              draftKey: 'cancelled_group_${message['id']}',
+              ownerUserId: actingUserId,
+              kind: current.kind,
+              title: current.title,
+              description: message['body'] as String,
+              updatedAt: now,
+            );
+            final values = draft.toSqlMap();
+            values['draft_key'] = '$actingUserId::${draft.draftKey}';
+            await txn.upsert('drafts_local', 'draft_key', values);
+            await txn.delete(
+              'outbox_operations',
+              where: 'operation_id = ?',
+              whereArgs: [message['client_mutation_id']],
+            );
+            await txn.delete(
+              'emergency_group_messages_local',
+              where: 'cache_id = ?',
+              whereArgs: [message['cache_id']],
+            );
+          }
           return cancelled;
         }
       }
@@ -1626,6 +1671,115 @@ class LocalSqliteDatabase {
 
   /// Abre o recupera una conversación contextual única entre dos participantes
   /// autenticados sobre una publicación o solicitud.
+  Future<void> markEmergencyGroupVisited(
+    String owner,
+    String publicationId,
+  ) async {
+    await _engine.runInTransaction((txn) async {
+      await txn.upsert('cache_metadata', 'cache_key', {
+        'cache_key': 'group_visit:$owner:$publicationId',
+        'last_synced_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    });
+  }
+
+  Future<Set<String>> visitedEmergencyGroups(String owner) async {
+    final rows = await _engine.query('cache_metadata');
+    final prefix = 'group_visit:$owner:';
+    return rows
+        .map((r) => r['cache_key'] as String)
+        .where((k) => k.startsWith(prefix))
+        .map((k) => k.substring(prefix.length))
+        .toSet();
+  }
+
+  Future<List<EmergencyGroupMessage>> listEmergencyGroupMessages(
+    String owner,
+    String publicationId,
+  ) async {
+    final rows = await _engine.query(
+      'emergency_group_messages_local',
+      where: 'owner_user_id = ? AND publication_id = ?',
+      whereArgs: [owner, publicationId],
+      orderBy: 'created_at ASC',
+    );
+    return rows.map(EmergencyGroupMessage.fromMap).toList()..sort((a, b) {
+      final result = a.createdAt.compareTo(b.createdAt);
+      return result == 0 ? a.id.compareTo(b.id) : result;
+    });
+  }
+
+  Future<EmergencyGroupMessage> saveEmergencyGroupMessage({
+    required String owner,
+    required String publicationId,
+    required String senderAlias,
+    required String body,
+  }) async {
+    if (body.trim().isEmpty || body.trim().length > 1000) {
+      throw StateError('Escribe un mensaje de hasta 1000 caracteres.');
+    }
+    final now = DateTime.now().toUtc();
+    final id = EntityId.create();
+    final message = EmergencyGroupMessage(
+      id: id,
+      clientMutationId: id,
+      publicationId: publicationId,
+      senderId: owner,
+      senderAlias: senderAlias,
+      body: body.trim(),
+      createdAt: now,
+      syncStatus: SyncStatus.pendiente,
+    );
+    await _engine.runInTransaction((txn) async {
+      await txn.upsert('emergency_group_messages_local', 'cache_id', {
+        'cache_id': '$owner:$id',
+        'owner_user_id': owner,
+        ...message.toMap(),
+      });
+      await txn.delete(
+        'drafts_local',
+        where: 'draft_key = ?',
+        whereArgs: ['$owner::group_$publicationId'],
+      );
+      final op = OutboxOperation(
+        operationId: id,
+        ownerUserId: owner,
+        entityType: 'emergency_group_message',
+        entityId: id,
+        action: 'insert',
+        payloadJson: jsonEncode(message.toMap()),
+        syncStatus: SyncStatus.pendiente,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await txn.upsert('outbox_operations', 'operation_id', op.toSqlMap());
+    });
+    return message;
+  }
+
+  Future<void> mergeEmergencyGroupMessages(
+    String owner,
+    List<EmergencyGroupMessage> messages,
+  ) async {
+    await _engine.runInTransaction((txn) async {
+      for (final message in messages) {
+        final old = await txn.query(
+          'emergency_group_messages_local',
+          where: 'cache_id = ?',
+          whereArgs: ['$owner:${message.id}'],
+        );
+        if (old.isNotEmpty && old.single['sync_status'] != 'confirmado') {
+          continue;
+        }
+        await txn.upsert('emergency_group_messages_local', 'cache_id', {
+          'cache_id': '$owner:${message.id}',
+          'owner_user_id': owner,
+          ...message.toMap(),
+        });
+      }
+    });
+  }
+
   Future<ConversationThread> openOrGetConversation({
     required String id,
     required String clientMutationId,
@@ -1954,6 +2108,19 @@ class LocalSqliteDatabase {
           map['updated_at'] = now.toIso8601String();
           await txn.upsert('help_offers_local', 'id', map);
         }
+      } else if (op.entityType == 'emergency_group_message') {
+        final key = '${op.ownerUserId}:${op.entityId}';
+        final rows = await txn.query(
+          'emergency_group_messages_local',
+          where: 'cache_id = ?',
+          whereArgs: [key],
+        );
+        if (rows.isNotEmpty) {
+          final row = Map<String, Object?>.from(rows.single);
+          row['sync_status'] = newStatus.dbValue;
+          row['last_error'] = lastError;
+          await txn.upsert('emergency_group_messages_local', 'cache_id', row);
+        }
       } else if (op.entityType == 'conversation') {
         final convRows = await txn.query(
           'conversations_local',
@@ -2140,6 +2307,20 @@ class LocalSqliteDatabase {
   /// al cerrar sesión, manteniendo aislados por `owner_user_id` los pendientes.
   Future<void> clearPrivateCacheOnSignOut(String signedOutUserId) async {
     await _engine.runInTransaction((txn) async {
+      final groupRows = await txn.query(
+        'emergency_group_messages_local',
+        where: 'owner_user_id = ?',
+        whereArgs: [signedOutUserId],
+      );
+      for (final row in groupRows) {
+        if (row['sync_status'] == 'confirmado') {
+          await txn.delete(
+            'emergency_group_messages_local',
+            where: 'cache_id = ?',
+            whereArgs: [row['cache_id']],
+          );
+        }
+      }
       final conversations = await txn.query('conversations_local');
       for (final row in conversations) {
         final conversation = ConversationThread.fromSqlMap(row);

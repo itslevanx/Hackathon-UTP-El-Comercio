@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/app_config.dart';
 import '../models/domain_models.dart';
+import '../models/emergency_group_message.dart';
 
 /// Resultado de sincronizar una operación de la cola Outbox hacia el backend.
 class RemoteSyncResult {
@@ -492,6 +493,7 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
           'publication',
           'publication_status',
           'publication_location',
+          'emergency_group_message',
           'publication_edit',
           'publication_delete',
           'recommendation',
@@ -556,6 +558,17 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
               status: SyncStatus.confirmado,
               confirmedVersion: row['version'] as int,
             );
+          case 'emergency_group_message':
+            await _client.rpc(
+              'send_emergency_group_message',
+              params: {
+                'p_id': payload['id'],
+                'p_mutation': payload['client_mutation_id'],
+                'p_publication': payload['publication_id'],
+                'p_body': payload['body'],
+              },
+            );
+            return const RemoteSyncResult(status: SyncStatus.confirmado);
           case 'publication_edit':
           case 'publication_delete':
             final version = await _client.rpc(
@@ -787,6 +800,41 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     );
     _realtimeController.add(message);
     return message;
+  }
+
+  Future<List<EmergencyGroupMessage>> fetchEmergencyGroupMessages(
+    String publicationId, {
+    DateTime? beforeTime,
+    String? beforeId,
+  }) async {
+    if (isTestDouble) return const [];
+    _requireRealBackend();
+    final rows = await _client.rpc(
+      'list_emergency_group_messages',
+      params: {
+        'p_publication': publicationId,
+        'p_before_time': beforeTime?.toUtc().toIso8601String(),
+        'p_before_id': beforeId,
+      },
+    ) as List<dynamic>;
+    return rows
+        .map(
+          (row) => EmergencyGroupMessage.fromMap(
+            Map<String, Object?>.from(row as Map),
+          ),
+        )
+        .toList();
+  }
+
+  Stream<void> watchEmergencyGroup(String publicationId) {
+    if (isTestDouble || !isLiveSupabaseConnected) return const Stream.empty();
+    return _client
+        .from('emergency_group_messages')
+        .stream(primaryKey: ['id'])
+        .eq('publication_id', publicationId)
+        .order('created_at', ascending: false)
+        .limit(100)
+        .map((_) {});
   }
 
   Future<List<Publication>> fetchFeedPage({

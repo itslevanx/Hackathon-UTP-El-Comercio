@@ -621,7 +621,7 @@ void main() {
     addTearDown(c.dispose);
     await c.database.mergeRemotePublications([pub('direct')]);
     await tester.pumpWidget(
-      NexoNeighborhoodApp(
+      Conecta2App(
         appController: c,
         accessibilityController: AccessibilityController(),
       ),

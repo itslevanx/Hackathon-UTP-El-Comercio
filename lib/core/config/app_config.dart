@@ -1,15 +1,9 @@
 import 'dart:math' as math;
 
-/// Configuración centralizada de la aplicación.
-/// El nombre definitivo se decidirá al final; se conserva [provisionalAppName]
-/// centralizado para poder cambiarlo desde un único punto.
+/// Configuración centralizada de Conecta2.
 class AppConfig {
   const AppConfig._();
-
-  static const String provisionalAppName = String.fromEnvironment(
-    'APP_PROVISIONAL_NAME',
-    defaultValue: 'NEXO',
-  );
+  static const String appName = 'Conecta2';
 
   static const String supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
@@ -41,7 +35,7 @@ class AppConfig {
       !supabaseUrl.contains('example-project-ref');
 
   static bool get hasSupabaseCredentials => isSupabaseConfigured;
-  static const String provisionalSubtitle = 'Tu comunidad, más cerca';
+  static const String subtitle = 'Tu comunidad, más cerca';
   static const double defaultLat = -12.076;
   static const double defaultLng = -77.063;
   static const zonesByDistrict = neighborhoodSectors;

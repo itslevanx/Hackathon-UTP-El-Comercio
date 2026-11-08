@@ -333,7 +333,7 @@ void main() {
     await controller.initialize(startWithActiveSession: false);
     controller.navigateTo(AppSection.autenticacion);
     await tester.pumpWidget(
-      NexoNeighborhoodApp(
+      Conecta2App(
         appController: controller,
         accessibilityController: AccessibilityController(),
       ),
@@ -415,7 +415,7 @@ void main() {
       final before = controller.currentUser!;
       controller.navigateTo(AppSection.autenticacion);
       await tester.pumpWidget(
-        NexoNeighborhoodApp(
+        Conecta2App(
           appController: controller,
           accessibilityController: AccessibilityController(),
         ),
@@ -490,7 +490,7 @@ void main() {
       ..remove('service_lat')
       ..remove('service_lng')
       ..remove('service_address')
-        ..remove('deleted_at');
+      ..remove('deleted_at');
     await oldDb.insert('publications_local', oldPublication);
     final originalPayload = jsonEncode(oldPublication);
     await oldDb.insert(
