@@ -59,6 +59,8 @@ yarn-error.log*
 **/android/.gradle/
 **/android/local.properties
 **/android/key.properties
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist
 **/android/captures/
 **/ios/Pods/
 **/ios/.symlinks/
