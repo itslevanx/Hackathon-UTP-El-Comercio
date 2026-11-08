@@ -56,6 +56,15 @@ Crea `.env.local.json` en la raíz con la configuración pública de tu proyecto
 flutter run --dart-define-from-file=.env.local.json
 ```
 
+Para ejecutar con el botón Run de Xcode, prepara también la configuración local:
+
+```sh
+python3 tools/configure_ios_environment.py
+open ios/Runner.xcworkspace
+```
+
+Vuelve a ejecutar el script si cambias `.env.local.json`. Genera `.env.ios.xcconfig`, ignorado por Git; no copies sus valores al proyecto ni al esquema de Xcode. Esta configuración se conserva al ejecutar `flutter pub get`. Si compilas desde Flutter con `--dart-define-from-file`, prevalecen los parámetros de ese comando.
+
 Sin configuración remota, los simulacros siguen disponibles. La app no crea sesiones ficticias ni presenta envíos locales como confirmados.
 
 ## Mapas CARTO
