@@ -140,6 +140,8 @@ class _PublishScreenState extends State<PublishScreen> {
   }
 
   Future<void> _handleSubmit() async {
+    if (_submitting) return;
+    FocusScope.of(context).unfocus();
     setState(() {
       _errorMessage = null;
       _submitting = true;
@@ -156,11 +158,17 @@ class _PublishScreenState extends State<PublishScreen> {
         location: _location,
       );
       if (mounted) {
+        _titleController.clear();
+        _descController.clear();
+        _availabilityController.clear();
         setState(() {
+          _location = null;
+          _explicitResourceShareConsent = false;
           _submitting = false;
         });
       }
     } catch (e) {
+      if (!mounted) return;
       await _persistDraftSilently();
       if (mounted) {
         setState(() {
@@ -279,26 +287,32 @@ class _PublishScreenState extends State<PublishScreen> {
 
                 OutlinedButton.icon(
                   key: const Key('btn_choose_publication_pin'),
-                  onPressed: () async {
-                    final choice = await Navigator.push<ChosenMapLocation>(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => LocationPickerScreen(
-                          catalog: c.locationCatalog,
-                          districtUbigeo:
-                              _location?.districtUbigeo ??
-                              c.activeDistrictUbigeo,
-                          initialPoint:
-                              _location?.point ??
-                              approximateMapPoint(c.activeLat, c.activeLng),
-                          allowExactService: _selectedKind.isService,
-                        ),
-                      ),
-                    );
-                    if (!mounted || choice == null) return;
-                    setState(() => _location = choice);
-                    await _persistDraftSilently();
-                  },
+                  onPressed: _submitting
+                      ? null
+                      : () async {
+                          final choice =
+                              await Navigator.push<ChosenMapLocation>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => LocationPickerScreen(
+                                    catalog: c.locationCatalog,
+                                    districtUbigeo:
+                                        _location?.districtUbigeo ??
+                                        c.activeDistrictUbigeo,
+                                    initialPoint:
+                                        _location?.point ??
+                                        approximateMapPoint(
+                                          c.activeLat,
+                                          c.activeLng,
+                                        ),
+                                    allowExactService: _selectedKind.isService,
+                                  ),
+                                ),
+                              );
+                          if (!mounted || choice == null) return;
+                          setState(() => _location = choice);
+                          await _persistDraftSilently();
+                        },
                   icon: const Icon(Icons.add_location_alt_outlined),
                   label: Text(
                     _location == null
@@ -316,6 +330,7 @@ class _PublishScreenState extends State<PublishScreen> {
                   onTapOutside: dismissTextInput,
                   key: const Key('input_publish_title'),
                   controller: _titleController,
+                  readOnly: _submitting,
                   onChanged: (_) => _persistDraftSilently(),
                   style: const TextStyle(fontSize: 18),
                   decoration: InputDecoration(
@@ -333,6 +348,7 @@ class _PublishScreenState extends State<PublishScreen> {
                   onTapOutside: dismissTextInput,
                   key: const Key('input_publish_description'),
                   controller: _descController,
+                  readOnly: _submitting,
                   maxLines: 3,
                   onChanged: (_) => _persistDraftSilently(),
                   style: const TextStyle(fontSize: 18),
@@ -348,6 +364,7 @@ class _PublishScreenState extends State<PublishScreen> {
                     onTapOutside: dismissTextInput,
                     key: const Key('input_publish_availability'),
                     controller: _availabilityController,
+                    readOnly: _submitting,
                     onChanged: (_) => _persistDraftSilently(),
                     style: const TextStyle(fontSize: 18),
                     decoration: const InputDecoration(
@@ -372,9 +389,12 @@ class _PublishScreenState extends State<PublishScreen> {
                         key: const Key('checkbox_resource_consent'),
                         contentPadding: EdgeInsets.zero,
                         value: _explicitResourceShareConsent,
-                        onChanged: (val) => setState(
-                          () => _explicitResourceShareConsent = val ?? false,
-                        ),
+                        onChanged: _submitting
+                            ? null
+                            : (val) => setState(
+                                () => _explicitResourceShareConsent =
+                                    val ?? false,
+                              ),
                         title: const Text(
                           'Confirmo que decido voluntariamente compartir este recurso durante la emergencia (solo se mostrará mi sector aproximado).',
                           style: TextStyle(
@@ -481,19 +501,21 @@ class _PublishScreenState extends State<PublishScreen> {
       selected: selected,
       selectedColor: AppTheme.actionGreen,
       backgroundColor: AppTheme.surfaceContainer,
-      onSelected: (_) {
-        setState(() {
-          _selectedKind = kind;
-          if (!kind.isService && _location != null) {
-            _location = ChosenMapLocation(
-              point: _location!.point,
-              districtUbigeo: _location!.districtUbigeo,
-            );
-          }
-          _selectedCategory = _defaultCategoryForKind(kind);
-          widget.controller.setPublishPresetKind(kind);
-        });
-      },
+      onSelected: _submitting
+          ? null
+          : (_) {
+              setState(() {
+                _selectedKind = kind;
+                if (!kind.isService && _location != null) {
+                  _location = ChosenMapLocation(
+                    point: _location!.point,
+                    districtUbigeo: _location!.districtUbigeo,
+                  );
+                }
+                _selectedCategory = _defaultCategoryForKind(kind);
+                widget.controller.setPublishPresetKind(kind);
+              });
+            },
     );
   }
 
