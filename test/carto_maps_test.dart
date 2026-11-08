@@ -1,3 +1,4 @@
+import 'package:hackathon_utp_el_comercio/core/intelligence/community_intelligence.dart';
 import 'package:hackathon_utp_el_comercio/core/maps/carto_tile_cache.dart';
 
 import 'dart:async';
@@ -449,6 +450,48 @@ void main() {
             .any((p) => p.id == 'late-private'),
         isFalse,
       );
+    },
+  );
+
+  testWidgets(
+    'Concentraciones son una capa distinta con círculo, nivel y detalle',
+    (tester) async {
+      RiskConcentration? selected;
+      final risk = RiskConcentration({
+        'category': 'inundacion',
+        'neighbors': 3,
+        'level': 'concentration',
+        'lat': -12.076,
+        'lng': -77.063,
+        'report_ids': ['a', 'b', 'c'],
+        'oldest': DateTime.utc(2026).toIso8601String(),
+        'newest': DateTime.utc(2026).toIso8601String(),
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: NeighborhoodMap(
+                records: const [],
+                center: LatLng(risk.lat, risk.lng),
+                risks: [risk],
+                onSelect: (_) {},
+                onSelectRisk: (v) => selected = v,
+                configuration: const CartoConfiguration(apiKey: 'test'),
+                tileProvider: _MemoryTiles(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(find.byType(CircleLayer), findsOneWidget);
+      await tester.tap(find.byTooltip('Concentración detectada: 3 vecinos'));
+      expect(selected, risk);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 

@@ -263,7 +263,7 @@ class ExploreMapController extends ChangeNotifier {
       });
       await loadLocal();
       if (pubs.length > 200 || resources.length > 200) capped = true;
-      notice = 'Registros actualizados. Solo los servicios que lo autorizan comparten su punto exacto.';
+      notice = null;
     } catch (_) {
       if (_disposed || ticket != _request) return;
       notice = 'No se pudo actualizar. Puedes consultar los registros locales y reintentar.';

@@ -1,6 +1,7 @@
 import '../../core/geography/peru_location_catalog.dart';
 import '../shared/peru_location_selector.dart';
 import '../voice_assistant/voice_assistant_screen.dart';
+import '../../core/intelligence/community_intelligence.dart';
 
 import 'dart:convert';
 
@@ -407,6 +408,40 @@ class _PublishScreenState extends State<PublishScreen> {
                     onChanged: _submitting
                         ? null
                         : (v) => setState(() => _voicePriority = v),
+                  ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(
+                      'publication_category_${_selectedKind.name}_$_selectedCategory',
+                    ),
+                    initialValue: _selectedCategory,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Categoría del recurso o incidente',
+                    ),
+                    items:
+                        {
+                              _selectedCategory: CommunityCategories.label(
+                                _selectedCategory,
+                              ),
+                              ...CommunityCategories.labels,
+                            }.entries
+                            .map(
+                              (e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: _submitting
+                        ? null
+                        : (v) {
+                            if (v != null) {
+                              setState(() => _selectedCategory = v);
+                            }
+                          },
                   ),
                   const SizedBox(height: 16),
                 ],
