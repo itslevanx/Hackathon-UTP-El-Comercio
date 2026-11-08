@@ -8,6 +8,7 @@ import '../../core/maps/explore_map_controller.dart';
 import '../../core/maps/map_location_service.dart';
 import '../../core/maps/chosen_map_location.dart';
 import '../../core/maps/carto_basemap.dart';
+import '../../core/models/domain_models.dart';
 import 'location_picker_screen.dart';
 import '../../core/state/app_controller.dart';
 import '../shared/peru_location_selector.dart';
@@ -128,49 +129,75 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
     }
   }
 
-  void _open(NeighborhoodMapRecord record) {
+  Future<void> _showDetails(NeighborhoodMapRecord record) async {
     final publication = record.publication;
-    if (publication != null) {
-      if (publication.kind.isService) {
-        widget.controller.openServiceDetail(publication);
-      } else {
-        widget.controller.openFavorDetail(publication);
-      }
-    } else {
-      // El recurso es el registro real ya autorizado, sin inventar una ruta.
-      showModalBottomSheet<void>(
-        context: context,
-        useSafeArea: true,
-        isScrollControlled: true,
-        builder: (context) => FractionallySizedBox(
-          heightFactor: .75,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  record.title,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 12),
-                Text(record.description),
-                const SizedBox(height: 12),
-                Text(record.sector),
-                const Text(
-                  'Referencia geográfica aproximada; no indica un domicilio.',
-                ),
-                Text('Fuente: ${record.resource!.sourceLabel}'),
-                Text(record.resource!.contactInfo),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cerrar'),
-                ),
-              ],
+    final resource = record.resource;
+    final openPublication = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('map_record_detail'),
+        scrollable: true,
+        title: Text(record.title),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(record.description),
+            const SizedBox(height: 12),
+            Text(
+              '${_label(record.group)} · ${record.category.replaceAll('_', ' ')}',
             ),
-          ),
+            Text(
+              'Zona: ${publication?.neighborhood ?? resource!.neighborhood} · ${record.sector}',
+            ),
+            if (publication != null) ...[
+              Text('Publicado por: ${publication.authorAlias}'),
+              if (publication.availabilityText.isNotEmpty)
+                Text('Disponibilidad: ${publication.availabilityText}'),
+              if (publication.shareServiceLocation)
+                Text('Dirección de atención: ${publication.serviceAddress}'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  PublicationStatusBadge(status: publication.status),
+                  SyncStatusBadge(
+                    status: publication.syncStatus,
+                    isEmergency: publication.kind.isEmergency,
+                  ),
+                ],
+              ),
+            ],
+            if (publication?.shareServiceLocation != true)
+              const Text('Ubicación aproximada.'),
+            if (resource != null) ...[
+              Text('Fuente: ${resource.sourceLabel}'),
+              if (resource.contactInfo.isNotEmpty) Text(resource.contactInfo),
+            ],
+          ],
         ),
-      );
+        actions: [
+          if (publication != null)
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Abrir publicación'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || openPublication != true || publication == null) return;
+    _openPublication(publication);
+  }
+
+  void _openPublication(Publication publication) {
+    if (publication.kind.isService) {
+      widget.controller.openServiceDetail(publication);
+    } else {
+      widget.controller.openFavorDetail(publication);
     }
   }
 
@@ -288,7 +315,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
               center: _map.center,
               privateLocation: _privateLocation,
               online: !widget.controller.isOfflineMode,
-              onSelect: _map.select,
+              onSelect: _showDetails,
             ),
           Wrap(
             spacing: 8,
@@ -310,41 +337,6 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
           ),
           if (_locationNotice != null)
             Semantics(liveRegion: true, child: Text(_locationNotice!)),
-          if (_map.selected != null)
-            Card(
-              key: const Key('map_selected_card'),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      _map.selected!.title,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    Text(
-                      _map.selected!.description,
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(_map.selected!.sector),
-                    Text(
-                      _map.selected!.publication?.shareServiceLocation == true
-                          ? 'Punto de atención compartido por el autor. Verifica la dirección antes de acudir.'
-                          : 'Zona aproximada; verifica el aviso con su autor.',
-                    ),
-                    if (_map.selected!.publication?.shareServiceLocation ==
-                        true)
-                      Text(_map.selected!.publication!.serviceAddress),
-                    FilledButton(
-                      key: const Key('map_open_detail'),
-                      onPressed: () => _open(_map.selected!),
-                      child: const Text('Ver detalle'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           const SizedBox(height: 12),
           Text(
             '${records.length} registros · $visibleOnMap con referencia en mapa',
@@ -384,10 +376,18 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                           ),
                       ],
                     ),
-                    onTap: () => _open(record),
+                    onTap: () {
+                      final publication = record.publication;
+                      if (publication == null || publication.kind.isEmergency) {
+                        _showDetails(record);
+                      } else {
+                        _openPublication(publication);
+                      }
+                    },
                   ),
-                  if (record.publication?.authorId ==
-                      widget.controller.currentUser?.id)
+                  if (record.publication != null &&
+                      record.publication!.authorId ==
+                          widget.controller.currentUser?.id)
                     TextButton.icon(
                       key: ValueKey('map_edit_location_${record.id}'),
                       onPressed: () => _editLocation(record),
