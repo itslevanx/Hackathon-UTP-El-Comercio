@@ -22,6 +22,8 @@ class AppConfig {
     defaultValue: '',
   );
 
+  static const String cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
+
   static const String authRedirectUrl = 'pe.vecinos.app://auth-callback';
 
   static bool isAuthCallbackUri(Uri uri) {

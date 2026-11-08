@@ -12,5 +12,21 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "NexoMapIdentity")!
+    let channel = FlutterMethodChannel(
+      name: "pe.vecinos.app/map_identity",
+      binaryMessenger: registrar.messenger()
+    )
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "headers" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let identifier = Bundle.main.bundleIdentifier else {
+        result(FlutterError(code: "missing_bundle", message: "Identificador no disponible", details: nil))
+        return
+      }
+      result(["X-Ios-Bundle-Identifier": identifier])
+    }
   }
 }
