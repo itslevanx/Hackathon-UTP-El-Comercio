@@ -7,6 +7,7 @@ import '../../core/models/domain_models.dart';
 import '../../core/models/emergency_group_message.dart';
 import '../../core/state/app_controller.dart';
 import '../shared/civic_widgets.dart';
+import 'message_bubble.dart';
 
 class EmergencyGroupChatScreen extends StatefulWidget {
   const EmergencyGroupChatScreen({super.key, required this.controller});
@@ -200,6 +201,15 @@ class _EmergencyGroupChatScreenState extends State<EmergencyGroupChatScreen> {
                       const Text(
                         'Conversación del distrito. No compartas direcciones privadas ni datos sensibles de otras personas.',
                       ),
+                      if (_notice != null) Text(_notice!),
+                      if (c.isOfflineMode)
+                        const Text(
+                          'Los mensajes nuevos quedan pendientes en este teléfono hasta recuperar conexión.',
+                        ),
+                      if (closed)
+                        const Text(
+                          'Emergencia cerrada. El grupo queda disponible para lectura.',
+                        ),
                       if (_messages.isEmpty)
                         const Text(
                           'Aún no hay mensajes. Puedes iniciar la coordinación con tus vecinos.',
@@ -213,52 +223,37 @@ class _EmergencyGroupChatScreenState extends State<EmergencyGroupChatScreen> {
                   );
                 }
                 final m = _messages[_messages.length - index - 1];
-                return Card(
+                return ConversationMessageBubble(
                   key: ValueKey('group_message_${m.id}'),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          m.senderAlias,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        Text(m.body, style: const TextStyle(fontSize: 18)),
-                        Text(m.createdAt.toLocal().toString().substring(0, 16)),
-                        if (!m.syncStatus.isConfirmed)
-                          SyncStatusBadge(status: m.syncStatus),
-                      ],
-                    ),
-                  ),
+                  isMine: m.senderId == c.currentUser?.id,
+                  senderAlias: m.senderAlias,
+                  body: m.body,
+                  createdAt: m.createdAt,
+                  status: m.syncStatus.isConfirmed
+                      ? null
+                      : SyncStatusBadge(status: m.syncStatus),
                 );
               },
             ),
           ),
-          if (_notice != null)
+          if (_notice != null || c.isOfflineMode || closed)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                _notice!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Semantics(
+                liveRegion: true,
+                label: _notice,
+                child: Text(
+                  closed
+                      ? 'Emergencia cerrada · Solo lectura'
+                      : c.isOfflineMode
+                      ? 'Sin conexión · Mensajes pendientes'
+                      : 'No se pudo actualizar el grupo',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
-          if (c.isOfflineMode)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                'Sin conexión: los mensajes nuevos quedan pendientes en este teléfono.',
-              ),
-            ),
-          if (closed)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text(
-                'Emergencia cerrada. El grupo queda disponible para lectura.',
-              ),
-            )
-          else
+          if (!closed)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
               child: Row(
@@ -270,7 +265,7 @@ class _EmergencyGroupChatScreenState extends State<EmergencyGroupChatScreen> {
                       enabled: !_sending,
                       controller: _input,
                       minLines: 1,
-                      maxLines: 3,
+                      maxLines: constraints.maxHeight < 260 ? 1 : 3,
                       maxLength: 1000,
                       contextMenuBuilder: buildTextSelectionToolbar,
                       onTapOutside: dismissTextInput,

@@ -8,6 +8,7 @@ import '../../core/models/domain_models.dart';
 import '../../core/state/app_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../shared/civic_widgets.dart';
+import 'message_bubble.dart';
 
 /// Conversaciones privadas del vecino y grupos de emergencia consultados.
 class ChatListScreen extends StatelessWidget {
@@ -345,9 +346,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                           final message =
                               _messages[_messages.length - 1 - index];
                           final isMine = message.senderId == c.currentUser?.id;
-                          return _MessageBubble(
+                          return ConversationMessageBubble(
                             key: ValueKey(message.id),
-                            message: message,
+                            senderAlias: message.senderAlias,
+                            body: message.body,
+                            createdAt: message.createdAt,
                             isMine: isMine,
                           );
                         },
@@ -393,55 +396,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           ],
         );
       },
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({
-    super.key,
-    required this.message,
-    required this.isMine,
-  });
-
-  final ChatMessage message;
-  final bool isMine;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) => Align(
-        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.8),
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isMine ? const Color(0xFFBCEAD0) : const Color(0xFFE9EDF2),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isMine ? 'Tú' : message.senderAlias,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-              Text(
-                message.body,
-                style: const TextStyle(
-                  fontSize: 17,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
