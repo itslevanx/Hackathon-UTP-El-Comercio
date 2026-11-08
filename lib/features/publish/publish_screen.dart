@@ -1,3 +1,5 @@
+import '../../core/intelligence/community_intelligence.dart';
+
 import 'dart:convert';
 
 import '../../core/accessibility/text_input_support.dart';
@@ -79,6 +81,7 @@ class _PublishScreenState extends State<PublishScreen> {
         _titleController.text = draft.title;
         _descController.text = draft.description;
         _availabilityController.text = draft.availabilityText;
+        _selectedCategory = draft.category;
         if (draft.locationJson.isNotEmpty) {
           try {
             _location = ChosenMapLocation.tryFromMap(
@@ -283,6 +286,37 @@ class _PublishScreenState extends State<PublishScreen> {
                   ),
                 ],
 
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  key: ValueKey(
+                    'publication_category_${_selectedKind.name}_$_selectedCategory',
+                  ),
+                  initialValue: _selectedCategory,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Categoría del recurso o incidente',
+                  ),
+                  items:
+                      {
+                            _selectedCategory: CommunityCategories.label(
+                              _selectedCategory,
+                            ),
+                            ...CommunityCategories.labels,
+                          }.entries
+                          .map(
+                            (e) => DropdownMenuItem(
+                              value: e.key,
+                              child: Text(e.value),
+                            ),
+                          )
+                          .toList(),
+                  onChanged: _submitting
+                      ? null
+                      : (v) {
+                          if (v != null) setState(() => _selectedCategory = v);
+                        },
+                ),
+                const SizedBox(height: 16),
                 OutlinedButton.icon(
                   key: const Key('btn_choose_publication_pin'),
                   onPressed: _submitting

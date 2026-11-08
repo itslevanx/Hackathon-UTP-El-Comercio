@@ -60,7 +60,11 @@ class SqfliteStoreEngine implements LocalStoreEngine {
   """;
   static const groupMessagesIndex =
       'CREATE INDEX IF NOT EXISTS idx_group_messages_local ON emergency_group_messages_local(owner_user_id,publication_id,created_at,id)';
+  static const String intelligenceSchema =
+      '''CREATE TABLE IF NOT EXISTS intelligence_cache (cache_key TEXT PRIMARY KEY, payload TEXT NOT NULL)''';
+
   static const List<String> schemaStatements = [
+    intelligenceSchema,
     groupMessagesSchema,
     groupMessagesIndex,
     '''
@@ -294,8 +298,9 @@ class SqfliteStoreEngine implements LocalStoreEngine {
     final fullPath = p.join(databasesPath, databaseFileName);
     _db = await openDatabase(
       fullPath,
-      version: 5,
+      version: 6,
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 6) await db.execute(intelligenceSchema);
         if (oldVersion < 5) {
           await db.execute(groupMessagesSchema);
           await db.execute(groupMessagesIndex);
@@ -441,6 +446,7 @@ class InMemoryTransactionalStoreEngine implements LocalStoreEngine {
       'community_resources_local',
       'support_groups_local',
       'cache_metadata',
+      'intelligence_cache',
       'practice_progress_local',
     ]) {
       _tables.putIfAbsent(name, () => <String, Map<String, Object?>>{});
@@ -2485,6 +2491,33 @@ class LocalSqliteDatabase {
     }).toList();
   }
 
+  Future<Map<String, dynamic>?> readIntelligenceCache(String key) async {
+    final rows = await _engine.query(
+      'intelligence_cache',
+      where: 'cache_key = ?',
+      whereArgs: [key],
+    );
+    if (rows.isEmpty) return null;
+    try {
+      return jsonDecode(rows.single['payload'] as String)
+          as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveIntelligenceCache(
+    String key,
+    Map<String, dynamic> payload,
+  ) async {
+    await _engine.runInTransaction((txn) async {
+      await txn.upsert('intelligence_cache', 'cache_key', {
+        'cache_key': key,
+        'payload': jsonEncode(payload),
+      });
+    });
+  }
+
   Future<DateTime?> getLastSyncTimestamp() async {
     final rows = await _engine.query(
       'cache_metadata',
@@ -2511,6 +2544,16 @@ class LocalSqliteDatabase {
   /// al cerrar sesión, manteniendo aislados por `owner_user_id` los pendientes.
   Future<void> clearPrivateCacheOnSignOut(String signedOutUserId) async {
     await _engine.runInTransaction((txn) async {
+      for (final row in await txn.query('intelligence_cache')) {
+        final key = row['cache_key'] as String;
+        if (key.startsWith('intelligence:v1:$signedOutUserId:')) {
+          await txn.delete(
+            'intelligence_cache',
+            where: 'cache_key = ?',
+            whereArgs: [key],
+          );
+        }
+      }
       final groupRows = await txn.query(
         'emergency_group_messages_local',
         where: 'owner_user_id = ?',
