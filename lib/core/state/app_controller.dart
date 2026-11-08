@@ -4,6 +4,8 @@ import 'package:flutter/widgets.dart';
 
 import '../config/app_config.dart';
 import '../geography/peru_location_catalog.dart';
+import '../maps/chosen_map_location.dart';
+import '../maps/carto_basemap.dart';
 import '../models/entity_id.dart';
 import '../database/local_sqlite_database.dart';
 import '../models/domain_models.dart';
@@ -504,6 +506,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     String availabilityText = '',
     bool shareResourceConsent = false,
     String? customClientMutationId,
+    ChosenMapLocation? location,
   }) async {
     final user = _currentUser;
     if (user == null) {
@@ -516,6 +519,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       throw StateError('Describe brevemente qué necesitas o qué ofreces.');
     }
 
+    if (location != null) _validatePublicationLocation(location, kind);
     final now = DateTime.now().toUtc();
     final mutationId = customClientMutationId ?? EntityId.create();
     final pubId = EntityId.create();
@@ -534,17 +538,25 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       category: category,
       title: title.trim(),
       description: description.trim(),
-      neighborhood: user.neighborhood,
+      neighborhood: location == null
+          ? user.neighborhood
+          : locationCatalog.district(location.districtUbigeo)!.name,
       sector: user.sector,
-      districtUbigeo: user.districtUbigeo,
+      districtUbigeo: location?.districtUbigeo ?? user.districtUbigeo,
       availabilityText: availabilityText.trim().isEmpty
           ? 'Horario flexible previa coordinación'
           : availabilityText.trim(),
       priority: priority,
       status: PublicationStatus.abierta,
-      approxLat: user.approxLat,
-      approxLng: user.approxLng,
+      approxLat: location?.publicLat ?? user.approxLat,
+      approxLng: location?.publicLng ?? user.approxLng,
       shareResourceConsent: shareResourceConsent,
+      shareServiceLocation: location?.shareExactService ?? false,
+      serviceLat: location?.serviceLat,
+      serviceLng: location?.serviceLng,
+      serviceAddress: location?.shareExactService == true
+          ? location!.address
+          : '',
       syncStatus: SyncStatus.pendiente,
       createdAt: now,
       updatedAt: now,
@@ -878,6 +890,45 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   void openConversation(ConversationThread thread) {
     _selectedConversation = thread;
     navigateTo(AppSection.chatConversacion);
+  }
+
+  void _validatePublicationLocation(
+    ChosenMapLocation location,
+    PublicationKind kind,
+  ) {
+    if (locationCatalog.district(location.districtUbigeo) == null ||
+        approximateMapPoint(
+              location.point.latitude,
+              location.point.longitude,
+            ) ==
+            null) {
+      throw StateError('Selecciona un distrito y punto válidos.');
+    }
+    if (location.shareExactService && !kind.isService) {
+      throw StateError('Solo un servicio puede compartir un punto exacto.');
+    }
+    if (location.address.length > 300) {
+      throw StateError('La dirección debe tener como máximo 300 caracteres.');
+    }
+  }
+
+  Future<void> updatePublicationLocation(
+    Publication publication,
+    ChosenMapLocation location,
+  ) async {
+    final uid = _currentUser?.id;
+    if (uid == null || publication.authorId != uid) {
+      throw StateError('Solo el autor puede ubicar su publicación.');
+    }
+    _validatePublicationLocation(location, publication.kind);
+    await database.updatePublicationLocation(
+      publicationId: publication.id,
+      actingUserId: uid,
+      location: location.toMap(),
+    );
+    await refreshAllLocalData();
+    if (!isOfflineMode) await outboxSyncService.syncPendingForUser(uid);
+    if (_currentUser?.id == uid) await refreshAllLocalData();
   }
 
   /// Actualiza filtros del directorio de servicios

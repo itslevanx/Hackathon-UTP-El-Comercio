@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../config/app_config.dart';
 import '../models/domain_models.dart';
+import '../models/entity_id.dart';
 
 /// Contrato de motor transaccional SQLite para permitir ejecución nativa con
 /// `sqflite` en Android/iOS y pruebas deterministas en entornos sin canal nativo.
@@ -86,6 +87,10 @@ class SqfliteStoreEngine implements LocalStoreEngine {
       approx_lat REAL,
       approx_lng REAL,
       share_resource_consent INTEGER NOT NULL DEFAULT 0,
+      share_service_location INTEGER NOT NULL DEFAULT 0,
+      service_lat REAL,
+      service_lng REAL,
+      service_address TEXT NOT NULL DEFAULT '',
       recommendation_count INTEGER NOT NULL DEFAULT 0,
       sync_status TEXT NOT NULL DEFAULT 'confirmado',
       last_error TEXT NOT NULL DEFAULT '',
@@ -170,6 +175,7 @@ class SqfliteStoreEngine implements LocalStoreEngine {
       description TEXT NOT NULL,
       category TEXT NOT NULL DEFAULT 'general',
       availability_text TEXT NOT NULL DEFAULT '',
+      location_json TEXT NOT NULL DEFAULT '',
       priority TEXT NOT NULL DEFAULT 'normal',
       updated_at TEXT NOT NULL,
       PRIMARY KEY (draft_key, owner_user_id)
@@ -274,9 +280,31 @@ class SqfliteStoreEngine implements LocalStoreEngine {
     final fullPath = p.join(databasesPath, databaseFileName);
     _db = await openDatabase(
       fullPath,
-      version: 2,
+      version: 3,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) await upgradeLocationTables(db);
+        if (oldVersion >= 2 && oldVersion < 3) {
+          await db.execute(
+            'ALTER TABLE publications_local ADD COLUMN share_service_location INTEGER NOT NULL DEFAULT 0',
+          );
+          await db.execute(
+            'ALTER TABLE publications_local ADD COLUMN service_lat REAL',
+          );
+          await db.execute(
+            'ALTER TABLE publications_local ADD COLUMN service_lng REAL',
+          );
+          await db.execute(
+            "ALTER TABLE publications_local ADD COLUMN service_address TEXT NOT NULL DEFAULT ''",
+          );
+        }
+        if (oldVersion < 3) {
+          final columns = await db.rawQuery('PRAGMA table_info(drafts_local)');
+          if (!columns.any((row) => row['name'] == 'location_json')) {
+            await db.execute(
+              "ALTER TABLE drafts_local ADD COLUMN location_json TEXT NOT NULL DEFAULT ''",
+            );
+          }
+        }
       },
       onCreate: (db, version) async {
         for (final sql in schemaStatements) {
@@ -971,6 +999,10 @@ class LocalSqliteDatabase {
           publication.approxLng,
         ),
         shareResourceConsent: publication.shareResourceConsent,
+        shareServiceLocation: publication.shareServiceLocation,
+        serviceLat: publication.serviceLat,
+        serviceLng: publication.serviceLng,
+        serviceAddress: publication.serviceAddress,
         recommendationCount: publication.recommendationCount,
         syncStatus: SyncStatus.pendiente,
         lastError: '',
@@ -1012,6 +1044,59 @@ class LocalSqliteDatabase {
       );
 
       return pendingPub;
+    });
+  }
+
+  Future<Publication> updatePublicationLocation({
+    required String publicationId,
+    required String actingUserId,
+    required Map<String, Object?> location,
+  }) async {
+    return _engine.runInTransaction((txn) async {
+      final rows = await txn.query(
+        'publications_local',
+        where: 'id = ?',
+        whereArgs: [publicationId],
+      );
+      if (rows.isEmpty) {
+        throw StateError('La publicación no está disponible en este teléfono.');
+      }
+      final current = Publication.fromSqlMap(rows.first);
+      if (current.authorId != actingUserId) {
+        throw StateError('Solo el autor puede ubicar su publicación.');
+      }
+      final share = location['share_service_location'] == true;
+      if (share && !current.kind.isService) {
+        throw StateError('Solo un servicio puede compartir un punto exacto.');
+      }
+      final now = DateTime.now().toUtc();
+      final updated = current.copyWith(
+        districtUbigeo: location['district_ubigeo'] as String,
+        approxLat: (location['approx_lat'] as num).toDouble(),
+        approxLng: (location['approx_lng'] as num).toDouble(),
+        shareServiceLocation: share,
+        serviceLat: (location['service_lat'] as num?)?.toDouble(),
+        serviceLng: (location['service_lng'] as num?)?.toDouble(),
+        serviceAddress: share ? location['service_address'] as String : '',
+        syncStatus: SyncStatus.pendiente,
+        version: current.version + 1,
+        updatedAt: now,
+      );
+      await txn.upsert('publications_local', 'id', updated.toSqlMap());
+      final op = OutboxOperation(
+        operationId: EntityId.create(),
+        ownerUserId: actingUserId,
+        entityType: 'publication_location',
+        entityId: publicationId,
+        action: 'update',
+        payloadJson: jsonEncode(location),
+        syncStatus: SyncStatus.pendiente,
+        expectedVersion: current.version,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await txn.upsert('outbox_operations', 'operation_id', op.toSqlMap());
+      return updated;
     });
   }
 
@@ -1686,7 +1771,8 @@ class LocalSqliteDatabase {
       }
 
       if (op.entityType == 'publication' ||
-          op.entityType == 'publication_status') {
+          op.entityType == 'publication_status' ||
+          op.entityType == 'publication_location') {
         final pubRows = await txn.query(
           'publications_local',
           where: 'id = ?',
@@ -1694,10 +1780,24 @@ class LocalSqliteDatabase {
         );
         if (pubRows.isNotEmpty) {
           final pub = Publication.fromSqlMap(pubRows.first);
+          final related = await txn.query(
+            'outbox_operations',
+            where: 'entity_id = ? AND owner_user_id = ?',
+            whereArgs: [op.entityId, op.ownerUserId],
+          );
+          final hasOtherPending = related.any(
+            (row) =>
+                row['operation_id'] != op.operationId &&
+                row['sync_status'] != 'confirmado',
+          );
           final updatedPub = pub.copyWith(
-            syncStatus: newStatus,
+            syncStatus: newStatus == SyncStatus.confirmado && hasOtherPending
+                ? SyncStatus.pendiente
+                : newStatus,
             lastError: lastError,
-            version: confirmedServerVersion ?? pub.version,
+            version: hasOtherPending
+                ? pub.version
+                : confirmedServerVersion ?? pub.version,
             updatedAt: now,
           );
           await txn.upsert('publications_local', 'id', updatedPub.toSqlMap());

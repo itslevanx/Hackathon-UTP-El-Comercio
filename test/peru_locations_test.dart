@@ -484,7 +484,12 @@ void main() {
       createdAt: user.updatedAt,
       updatedAt: user.updatedAt,
     );
-    final oldPublication = publication.toSqlMap()..remove('district_ubigeo');
+    final oldPublication = publication.toSqlMap()
+      ..remove('district_ubigeo')
+      ..remove('share_service_location')
+      ..remove('service_lat')
+      ..remove('service_lng')
+      ..remove('service_address');
     await oldDb.insert('publications_local', oldPublication);
     final originalPayload = jsonEncode(oldPublication);
     await oldDb.insert(
@@ -504,13 +509,15 @@ void main() {
     await oldDb.insert(
       'drafts_local',
       FormDraft(
-        draftKey: 'previous',
-        ownerUserId: user.id,
-        kind: PublicationKind.favorSolicitud,
-        title: 'Borrador anterior',
-        description: 'No perder este texto',
-        updatedAt: user.updatedAt,
-      ).toSqlMap()..['draft_key'] = '${user.id}::previous',
+          draftKey: 'previous',
+          ownerUserId: user.id,
+          kind: PublicationKind.favorSolicitud,
+          title: 'Borrador anterior',
+          description: 'No perder este texto',
+          updatedAt: user.updatedAt,
+        ).toSqlMap()
+        ..remove('location_json')
+        ..['draft_key'] = '${user.id}::previous',
     );
     await oldDb.close();
     final engine = SqfliteStoreEngine(databaseFileName: path);

@@ -53,6 +53,7 @@ abstract class RemoteBackendGateway {
     PublicationKind? kind,
     String? category,
     String? searchText,
+    int? maxResults,
   });
 
   Future<ChatMessage> sendRealtimeMessage({
@@ -479,6 +480,7 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
         if (!const [
           'publication',
           'publication_status',
+          'publication_location',
           'recommendation',
           'help_offer',
           'conversation',
@@ -512,6 +514,14 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
                     'sector': payload['sector'],
                     if (payload.containsKey('district_ubigeo'))
                       'district_ubigeo': payload['district_ubigeo'],
+                    if (payload.containsKey('share_service_location')) ...{
+                      'share_service_location':
+                          payload['share_service_location'] == 1 ||
+                          payload['share_service_location'] == true,
+                      'service_lat': payload['service_lat'],
+                      'service_lng': payload['service_lng'],
+                      'service_address': payload['service_address'] ?? '',
+                    },
                     'availability_text': payload['availability_text'] ?? '',
                     'priority': payload['priority'],
                     'status': payload['status'],
@@ -532,6 +542,20 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
             return RemoteSyncResult(
               status: SyncStatus.confirmado,
               confirmedVersion: row['version'] as int,
+            );
+          case 'publication_location':
+            final version = await _client.rpc(
+              'update_publication_location',
+              params: {
+                'p_id': operation.entityId,
+                'p_expected_version': operation.expectedVersion,
+                'p_operation_id': operation.operationId,
+                'p_location': payload,
+              },
+            );
+            return RemoteSyncResult(
+              status: SyncStatus.confirmado,
+              confirmedVersion: version as int,
             );
           case 'publication_status':
             final version = await _client.rpc(
@@ -624,7 +648,9 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     _processedIdempotencyKeys.add(operation.operationId);
     return RemoteSyncResult(
       status: SyncStatus.confirmado,
-      confirmedVersion: operation.expectedVersion,
+      confirmedVersion:
+          operation.expectedVersion +
+          (operation.entityType == 'publication_location' ? 1 : 0),
     );
   }
 
@@ -637,23 +663,28 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     PublicationKind? kind,
     String? category,
     String? searchText,
+    int? maxResults,
   }) async {
     if (!isLiveSupabaseConnected || simulateNetworkOffline) {
       return const [];
     }
 
-    final rows = await _client.rpc(
-      'search_publications_by_location',
-      params: {
-        'p_lat': originLat,
-        'p_lng': originLng,
-        'p_radius_meters': radiusMeters,
-        'p_district_ubigeo': districtUbigeo,
-        'p_kind': kind?.dbValue,
-        'p_category': category,
-        'p_search': searchText,
-      },
-    ) as List<dynamic>;
+    final rows =
+        await _client
+                .rpc(
+                  'search_publications_by_location',
+                  params: {
+                    'p_lat': originLat,
+                    'p_lng': originLng,
+                    'p_radius_meters': radiusMeters,
+                    'p_district_ubigeo': districtUbigeo,
+                    'p_kind': kind?.dbValue,
+                    'p_category': category,
+                    'p_search': searchText,
+                  },
+                )
+                .limit(maxResults ?? 1000)
+            as List<dynamic>;
     return rows.map((raw) {
       final row = raw as Map<String, dynamic>;
       final map = Map<String, Object?>.from(row['publication'] as Map);
@@ -719,6 +750,28 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     return message;
   }
 
+  Future<List<Publication>> fetchOwnMapPublications() async {
+    _requireRealBackend();
+    final user = _client.auth.currentUser;
+    if (user == null) return const [];
+    final rows = await _client
+        .from('publications')
+        .select()
+        .eq('author_id', user.id)
+        .order('created_at', ascending: false)
+        .limit(200);
+    return rows
+        .map(
+          (row) => Publication.fromSqlMap({
+            ...Map<String, Object?>.from(row),
+            'owner_user_id': user.id,
+            'author_alias': _activeLocalSession?.alias ?? 'Vecino',
+            'sync_status': 'confirmado',
+          }),
+        )
+        .toList();
+  }
+
   Future<Publication> fetchOwnPublication(String id) async {
     _requireRealBackend();
     final user = _client.auth.currentUser;
@@ -734,6 +787,38 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     map['author_alias'] = _activeLocalSession?.alias ?? 'Vecino';
     map['sync_status'] = 'confirmado';
     return Publication.fromSqlMap(map);
+  }
+
+  Future<List<CommunityResource>> fetchMapResources({
+    required double originLat,
+    required double originLng,
+    int radiusMeters = 20000,
+    int maxResults = 201,
+  }) async {
+    _requireRealBackend();
+    if (_client.auth.currentUser == null) return const [];
+    final rows =
+        await _client
+                .rpc(
+                  'search_resources_within_radius',
+                  params: {
+                    'p_lat': originLat,
+                    'p_lng': originLng,
+                    'p_radius_meters': radiusMeters,
+                  },
+                )
+                .limit(maxResults)
+            as List<dynamic>;
+    return rows
+        .where((row) => row['public_lat'] is num && row['public_lng'] is num)
+        .map(
+          (row) => CommunityResource.fromSqlMap({
+            ...Map<String, Object?>.from(row as Map),
+            'approx_lat': row['public_lat'],
+            'approx_lng': row['public_lng'],
+          }),
+        )
+        .toList();
   }
 
   /// Descarga datos mediante la sesión del usuario; RLS filtra los privados.

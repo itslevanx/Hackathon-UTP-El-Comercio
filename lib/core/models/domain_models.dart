@@ -284,6 +284,10 @@ class Publication {
     required this.approxLat,
     required this.approxLng,
     this.shareResourceConsent = false,
+    this.shareServiceLocation = false,
+    this.serviceLat,
+    this.serviceLng,
+    this.serviceAddress = '',
     this.recommendationCount = 0,
     this.syncStatus = SyncStatus.confirmado,
     this.lastError = '',
@@ -311,6 +315,10 @@ class Publication {
   final double? approxLat;
   final double? approxLng;
   final bool shareResourceConsent;
+  final bool shareServiceLocation;
+  final double? serviceLat;
+  final double? serviceLng;
+  final String serviceAddress;
   final int recommendationCount;
   final SyncStatus syncStatus;
   final String lastError;
@@ -340,6 +348,13 @@ class Publication {
 
   Publication copyWith({
     String? title,
+    String? districtUbigeo,
+    double? approxLat,
+    double? approxLng,
+    bool? shareServiceLocation,
+    double? serviceLat,
+    double? serviceLng,
+    String? serviceAddress,
     String? description,
     String? category,
     String? availabilityText,
@@ -363,13 +378,23 @@ class Publication {
       description: description ?? this.description,
       neighborhood: neighborhood,
       sector: sector,
-      districtUbigeo: districtUbigeo,
+      districtUbigeo: districtUbigeo ?? this.districtUbigeo,
       availabilityText: availabilityText ?? this.availabilityText,
       priority: priority ?? this.priority,
       status: status ?? this.status,
-      approxLat: approxLat,
-      approxLng: approxLng,
+      approxLat: approxLat ?? this.approxLat,
+      approxLng: approxLng ?? this.approxLng,
       shareResourceConsent: shareResourceConsent,
+      shareServiceLocation: shareServiceLocation ?? this.shareServiceLocation,
+      serviceLat: (shareServiceLocation ?? this.shareServiceLocation)
+          ? (serviceLat ?? this.serviceLat)
+          : null,
+      serviceLng: (shareServiceLocation ?? this.shareServiceLocation)
+          ? (serviceLng ?? this.serviceLng)
+          : null,
+      serviceAddress: (shareServiceLocation ?? this.shareServiceLocation)
+          ? (serviceAddress ?? this.serviceAddress)
+          : '',
       recommendationCount: recommendationCount ?? this.recommendationCount,
       syncStatus: syncStatus ?? this.syncStatus,
       lastError: lastError ?? this.lastError,
@@ -399,6 +424,10 @@ class Publication {
     'approx_lat': AppConfig.roundOptionalPublicCoordinate(approxLat),
     'approx_lng': AppConfig.roundOptionalPublicCoordinate(approxLng),
     'share_resource_consent': shareResourceConsent ? 1 : 0,
+    'share_service_location': shareServiceLocation ? 1 : 0,
+    'service_lat': shareServiceLocation ? serviceLat : null,
+    'service_lng': shareServiceLocation ? serviceLng : null,
+    'service_address': shareServiceLocation ? serviceAddress : '',
     'recommendation_count': recommendationCount,
     'sync_status': syncStatus.dbValue,
     'last_error': lastError,
@@ -432,6 +461,12 @@ class Publication {
       status: PublicationStatus.fromDb((map['status'] as String?) ?? 'abierta'),
       approxLat: ((map['approx_lat'] ?? map['public_lat']) as num?)?.toDouble(),
       approxLng: ((map['approx_lng'] ?? map['public_lng']) as num?)?.toDouble(),
+      shareServiceLocation:
+          map['share_service_location'] == true ||
+          map['share_service_location'] == 1,
+      serviceLat: (map['service_lat'] as num?)?.toDouble(),
+      serviceLng: (map['service_lng'] as num?)?.toDouble(),
+      serviceAddress: map['service_address'] as String? ?? '',
       shareResourceConsent:
           (map['share_resource_consent'] == 1 ||
           map['share_resource_consent'] == true),
@@ -746,8 +781,8 @@ class CommunityResource {
   final String description;
   final String neighborhood;
   final String sector;
-  final double approxLat;
-  final double approxLng;
+  final double? approxLat;
+  final double? approxLng;
   final String contactInfo;
   final String sourceLabel;
   final bool isDemo;
@@ -760,8 +795,8 @@ class CommunityResource {
     'description': description,
     'neighborhood': neighborhood,
     'sector': sector,
-    'approx_lat': AppConfig.roundPublicCoordinate(approxLat),
-    'approx_lng': AppConfig.roundPublicCoordinate(approxLng),
+    'approx_lat': AppConfig.roundOptionalPublicCoordinate(approxLat),
+    'approx_lng': AppConfig.roundOptionalPublicCoordinate(approxLng),
     'contact_info': contactInfo,
     'source_label': sourceLabel,
     'is_demo': isDemo ? 1 : 0,
@@ -777,8 +812,8 @@ class CommunityResource {
       neighborhood:
           (map['neighborhood'] as String?) ?? AppConfig.defaultNeighborhood,
       sector: (map['sector'] as String?) ?? AppConfig.defaultSector,
-      approxLat: ((map['approx_lat'] as num?)?.toDouble()) ?? -12.076,
-      approxLng: ((map['approx_lng'] as num?)?.toDouble()) ?? -77.063,
+      approxLat: (map['approx_lat'] as num?)?.toDouble(),
+      approxLng: (map['approx_lng'] as num?)?.toDouble(),
       contactInfo: (map['contact_info'] as String?) ?? '',
       sourceLabel: (map['source_label'] as String?) ?? '',
       isDemo: (map['is_demo'] == 1 || map['is_demo'] == true),
@@ -917,6 +952,7 @@ class FormDraft {
     required this.title,
     required this.description,
     this.category = 'general',
+    this.locationJson = '',
     this.availabilityText = '',
     this.priority = PublicationPriority.normal,
     required this.updatedAt,
@@ -928,6 +964,7 @@ class FormDraft {
   final String title;
   final String description;
   final String category;
+  final String locationJson;
   final String availabilityText;
   final PublicationPriority priority;
   final DateTime updatedAt;
@@ -939,6 +976,7 @@ class FormDraft {
     'title': title,
     'description': description,
     'category': category,
+    'location_json': locationJson,
     'availability_text': availabilityText,
     'priority': priority.dbValue,
     'updated_at': updatedAt.toUtc().toIso8601String(),
@@ -954,6 +992,7 @@ class FormDraft {
       title: (map['title'] as String?) ?? '',
       description: (map['description'] as String?) ?? '',
       category: (map['category'] as String?) ?? 'general',
+      locationJson: map['location_json'] as String? ?? '',
       availabilityText: (map['availability_text'] as String?) ?? '',
       priority: PublicationPriority.fromDb(
         (map['priority'] as String?) ?? 'normal',
