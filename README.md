@@ -190,7 +190,7 @@ node --check protipo/prototype.js
 node --check protipo/practice.js
 ```
 
-La revisión actual cuenta con 76 pruebas Flutter aprobadas y análisis sin incidencias. Las pruebas SQL pasaron en Supabase; su asesor de seguridad mostró cero errores y una advertencia de autenticación: la protección contra contraseñas filtradas está desactivada en el proyecto. Los avisos informativos de las tablas privadas sin políticas corresponden a su acceso cerrado a clientes.
+La revisión anterior de las funciones existentes se comprobó también con SQL en Supabase. La validación de los módulos comunitarios nuevos se describe al final de este documento y se ejecuta sobre una base aislada.
 
 La app se compiló y abrió en un simulador iPhone con iOS 27.1, donde se completaron las cinco misiones del simulacro de sismo. También se probaron la selección Amazonas → Chachapoyas → Chachapoyas, el guardado local de la zona, la búsqueda nativa de una referencia pública y el arrastre del pin, sin crear una cuenta. Todavía falta comprobar las conversaciones y la sincronización entre sesiones reales, GPS, VoiceOver y TalkBack. No hay APK validado: falta instalar el Android SDK en el entorno de revisión.
 
@@ -223,3 +223,62 @@ Desde «Mis publicaciones y reportes» también puedes editar o eliminar tus avi
 Los chats privados se agrupan por vecino, aunque lo contactes desde distintos servicios. El mensaje de contacto conserva el nombre del aviso como contexto. Los historiales anteriores se reúnen sin borrar sus mensajes y los borradores pendientes se conservan. La lista se ordena por el último mensaje, con los chats fijados primero; recibe cambios en tiempo real y consulta de nuevo al recuperar conexión.
 
 La migración `20261108163300_neighbor_chats_and_activity.sql` añade consultas y envíos entre vecinos con RLS, reutilización de la conversación existente e historial paginado. No elimina hilos ni mensajes históricos. Sus verificaciones están en `supabase/tests/neighbor_chat_verification.sql`.
+
+## Riesgos comunitarios y ayudas recomendadas
+
+**Explorar mapa** distingue las agrupaciones visuales de marcadores de las concentraciones de reportes. La RPC `community_risk_snapshot` ejecuta DBSCAN en PostGIS por distrito y categoría, sobre reportes de emergencia abiertos o en coordinación. Usa las ubicaciones públicas aproximadas y una proyección UTM del hemisferio sur elegida según la longitud media del distrito consultado. El radio se mide en metros proyectados; no representa un límite exacto sobre el terreno.
+
+Se conserva el reporte más reciente de cada cuenta y categoría dentro de la ventana temporal. Se excluyen eliminados, demostraciones, reportes futuros, ubicaciones ausentes y reportes de invitados sin identidad de cuenta. Las cuentas distintas no equivalen a identidades humanas verificadas. El límite es de 1.000 reportes independientes por consulta: si se supera, no se generan concentraciones parciales. Los reportes individuales siguen disponibles en la lista habitual.
+
+La configuración se concentra en `lib/core/intelligence/community_intelligence.dart`, clase `IntelligenceConfig`:
+
+| Parámetro | Valor inicial | Rango admitido por el servidor |
+|---|---:|---:|
+| Radio DBSCAN | 300 m | 50–1.000 m |
+| Ventana temporal | 15 minutos | 1–60 minutos |
+| Mínimo de cuentas distintas | 3 | 3–20 |
+| Compatibilidad del recurso | 40 % | Pesos no negativos que sumen 100 % |
+| Distancia | 25 % | Igual |
+| Disponibilidad | 20 % | Igual |
+| Urgencia de la solicitud | 15 % | Igual |
+
+Una concentración requiere atención cuando alcanza el doble del mínimo de cuentas y contiene un reporte del último tercio de la ventana. **Nunca se marca como emergencia confirmada**: el modelo actual no contiene una fuente autorizada de verificación ni evidencias estructuradas. Los círculos ilustran la zona aproximada del marcador, no el alcance de un desastre. El detalle muestra fechas, motivo y acceso a los reportes permitidos por RLS. Se puede filtrar por categoría y nivel de atención.
+
+### Coincidencias entre solicitudes y ofertas
+
+Desde el detalle de una solicitud propia abierta, **Consultar ayudas recomendadas** busca ofertas autorizadas del mismo distrito. El servidor filtra por titular, estado, consentimiento y familia de recurso; Dart puntúa los candidatos. Se incluyen ofertas de favores, préstamos, donaciones, habilidades, servicios y recursos de emergencia con consentimiento. Se excluyen ofertas resueltas, canceladas, en coordinación, eliminadas, de demostración y del propio solicitante.
+
+La compatibilidad usa identificadores de categoría, nunca el título ni palabras sueltas de la descripción. Hay equivalencias explícitas para `agua_potable`/`agua`, `movilidad`/`transporte` y `albergue`/`refugio`. Las demás categorías deben coincidir exactamente. Las categorías genéricas `general`, `donaciones` y `habilidades` no generan recomendaciones: se puede elegir una categoría concreta al publicar o editar, conservando el resto del aviso. Para ampliar las equivalencias hay que mantener alineados `CommunityCategories.family` y `community_resource_family`.
+
+El puntaje suma compatibilidad, cercanía normalizada hasta 20 km, disponibilidad y urgencia. Sin coordenadas comparables, la cercanía recibe cero puntos y se indica distancia desconocida. No se interpreta un horario escrito como prueba de disponibilidad: una oferta abierta recibe la mitad del peso de disponibilidad y exige confirmación con el vecino. **Marcar recurso agotado** pasa la oferta a resuelta mediante la cola de estados existente. El puntaje es orientativo, no una probabilidad de éxito ni una acreditación profesional. Los empates se ordenan por identificador para mantener resultados estables.
+
+Las ofertas llegan en páginas de 200, con cursor por identificador y **Cargar más ofertas**. La clasificación compara las páginas cargadas, no todas las ofertas aún sin consultar. Cada actualización comienza otra vez por la primera página. El detalle y el contacto vuelven a comprobar la publicación en el servidor; el mensaje solo se envía después de que el usuario lo escriba y pulse Enviar. Se reutiliza el chat privado por vecino.
+
+### Actualización, caché y permisos
+
+`IntelligenceController` reutiliza los avisos del controlador de la app y el ciclo de consulta de 30 segundos. Agrupa cambios durante 800 ms y no consulta al desplazar o ampliar el mapa. Las ediciones, eliminaciones, cambios de zona, sesión y conectividad invalidan la vigencia de la vista. La consulta periódica actualiza también las ventanas temporales aunque no lleguen nuevos reportes.
+
+SQLite **versión 6** añade únicamente `intelligence_cache`. Sus claves incluyen cuenta, UBIGEO, solicitud y configuración del algoritmo. Los resultados llevan fecha de consulta y vencimiento. La migración local conserva las publicaciones, borradores y operaciones pendientes; al salir se elimina la caché de inteligencia de esa cuenta.
+
+Sin conexión se muestran exclusivamente consultas guardadas, con su fecha y advertencia de caducidad. No se ejecuta DBSCAN local ni se buscan ofertas nuevas en el feed incompleto del teléfono. Los detalles guardados de recomendaciones siguen accesibles; el contacto y la confirmación de disponibilidad requieren volver a verificar con conexión. Un fallo de red conserva la copia, mientras que un rechazo de autorización la descarta. Cargar páginas posteriores no renueva la antigüedad de las páginas previas. El mapa base conserva sus propias reglas de caché de CARTO, sin nuevas descargas masivas.
+
+La migración incremental `supabase/migrations/20261108210000_community_intelligence.sql` añade dos índices y tres funciones: `community_resource_family`, `community_risk_snapshot` y `community_help_candidates`. Las RPC son `SECURITY INVOKER`, tienen `search_path` vacío y solo permiten ejecución autenticada. No amplían RLS, no publican perfiles privados y no requieren claves de servicio. Las coordenadas de concentraciones se redondean a tres decimales. No se añade una tabla de verificación ni un sistema de bloqueo: cualquier futura política restrictiva sobre publicaciones se aplica también a estas consultas.
+
+**Despliegue pendiente:** revisar y aplicar esa migración en el entorno de Supabase elegido antes de probar las RPC desde la app. La implementación no aplica cambios al proyecto de producción automáticamente. No hay configuración adicional de CARTO ni nuevas dependencias.
+
+### Verificación de estos módulos
+
+```sh
+flutter analyze
+flutter test
+# Base local o de pruebas con las migraciones del repositorio aplicadas:
+psql "$LOCAL_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/community_intelligence_verification.sql
+```
+
+Las pruebas nuevas cubren radio, ventana temporal, categorías incompatibles, cuentas repetidas, coordenadas modificadas o ausentes, eliminaciones, atención sin verificación, RLS, límite de 1.000 reportes, paginación, puntuación, empates, agotados, consentimiento, caché aislada, reconexión, respuestas tardías, migración SQLite y selección del marcador de concentración. Las fixtures SQL se revierten al finalizar.
+
+Para validar en Android e iOS, usar un entorno de pruebas con tres cuentas distintas, el mismo UBIGEO y reportes de la misma categoría a menos de 300 metros publicados dentro de 15 minutos. Abrir Explorar mapa, revisar la concentración, cambiar los filtros y editar o resolver uno de los reportes; la concentración debe actualizarse en el siguiente ciclo. Crear también una solicitud de agua y una oferta ajena de agua, comprobar su recomendación y el chat existente; una oferta de transporte no debe aparecer. Marcar la oferta como agotada y actualizar. Tras consultar ambas vistas, desconectar internet, reabrirlas y comprobar las fechas de datos guardados y que no se confirme disponibilidad. Reconectar y actualizar.
+
+Capacidad del proyecto remoto comprobada en lectura: PostgreSQL 17.11, PostGIS 3.3.7 y `ST_ClusterDBSCAN` disponible en `extensions`. Las verificaciones SQL se ejecutaron en una base local aislada con PostgreSQL 17.5 y PostGIS 3.5.2; no equivalen a una prueba de despliegue en producción. La implementación usa una función [disponible desde PostGIS 2.3](https://postgis.net/docs/ST_ClusterDBSCAN.html), con orden explícito para asignaciones de borde reproducibles.
+
+Validación de esta entrega: 111 pruebas Flutter aprobadas, `flutter analyze` sin incidencias, nueve scripts SQL aprobados en la base local e iOS Simulator compilado sin firma. Android no se compiló porque este entorno no tiene Android SDK ni Java Runtime. No se instalaron estos cambios en dispositivos físicos.
