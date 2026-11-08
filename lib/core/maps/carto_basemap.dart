@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 import '../config/app_config.dart';
+import 'carto_tile_cache.dart';
 
 /// No contiene la clave en su representación de diagnóstico.
 class CartoConfiguration {
@@ -75,8 +76,7 @@ LatLng? approximateMapPoint(double? latitude, double? longitude) {
   );
 }
 
-/// Un solo cliente por mapa. Sin disco ni descargas anticipadas; Flutter puede
-/// reutilizar imágenes en memoria durante la sesión. Nunca entrega URLs con clave
+/// Un cliente por mapa, con caché local de tiles vistos y sin descargas masivas. Nunca entrega URLs con clave
 /// al sistema de diagnósticos de ImageProvider.
 class CartoTileProvider extends TileProvider {
   CartoTileProvider({
@@ -85,17 +85,24 @@ class CartoTileProvider extends TileProvider {
     required this.onTileResult,
     this.onTileStatus,
     http.Client? client,
-  }) : _client = client ?? http.Client(),
+    this.online = true,
+    MapTileCache? tileCache,
+  }) : _cache = tileCache ?? CartoTileCache.shared,
+       _client = client ?? http.Client(),
        _identity = Map.of(identity),
        _cacheIdentity = sha256
            .convert(
-             utf8.encode('${configuration.apiKey}|${jsonEncode(identity)}'),
+             utf8.encode(
+               '${configuration.apiKey}|${jsonEncode(Map.fromEntries(identity.entries.toList()..sort((a, b) => a.key.compareTo(b.key))))}',
+             ),
            )
            .toString();
   final CartoConfiguration configuration;
   final Map<String, String> _identity;
   final String _cacheIdentity;
   final http.Client _client;
+  final MapTileCache _cache;
+  final bool online;
   final void Function(bool success) onTileResult;
   final void Function(TileCoordinates tile, bool success)? onTileStatus;
   bool _closed = false;
@@ -124,6 +131,29 @@ class CartoTileProvider extends TileProvider {
     TileCoordinates coordinates,
     Future<void> cancel,
   ) async {
+    final cacheKey =
+        '$_cacheIdentity:${coordinates.z}/${coordinates.x}/${coordinates.y}';
+    try {
+      final cached = await _cache.read(cacheKey);
+      if (cached != null) {
+        final codec = await ui.instantiateImageCodec(cached);
+        codec.dispose();
+        if (!_closed) {
+          onTileResult(true);
+          onTileStatus?.call(coordinates, true);
+        }
+        return cached;
+      }
+    } catch (_) {
+      /* La caché no debe impedir el mapa online. */
+    }
+    if (!online) {
+      if (!_closed) {
+        onTileResult(false);
+        onTileStatus?.call(coordinates, false);
+      }
+      return _transparent;
+    }
     var cancelled = false;
     final abort = Completer<void>();
     unawaited(
@@ -173,6 +203,13 @@ class CartoTileProvider extends TileProvider {
       // También valida imágenes dañadas sin enviar su URL a los logs de Flutter.
       final codec = await ui.instantiateImageCodec(data);
       codec.dispose();
+      try {
+        await _cache.write(
+          cacheKey,
+          data,
+          cartoCacheLifetime(response.headers),
+        );
+      } catch (_) {}
       if (!_closed && !cancelled) {
         onTileResult(true);
         onTileStatus?.call(coordinates, true);

@@ -1,3 +1,5 @@
+import 'package:hackathon_utp_el_comercio/core/maps/carto_tile_cache.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
@@ -165,6 +167,7 @@ void main() {
     final result = <bool>[];
     var calls = 0;
     final provider = CartoTileProvider(
+      tileCache: _NoCache(),
       configuration: const CartoConfiguration(apiKey: 'test-key'),
       identity: {'X-Ios-Bundle-Identifier': 'com.example.test'},
       onTileResult: result.add,
@@ -205,6 +208,7 @@ void main() {
     var active = 0;
     var peak = 0;
     final provider = CartoTileProvider(
+      tileCache: _NoCache(),
       configuration: const CartoConfiguration(apiKey: 'test'),
       identity: {},
       onTileResult: (_) {},
@@ -235,6 +239,7 @@ void main() {
     () async {
       final status = <bool>[];
       final provider = CartoTileProvider(
+        tileCache: _NoCache(),
         configuration: const CartoConfiguration(apiKey: 'private-test'),
         identity: {},
         onTileResult: status.add,
@@ -255,6 +260,7 @@ void main() {
     final status = <bool>[];
     final blocked = Completer<http.Response>();
     final provider = CartoTileProvider(
+      tileCache: _NoCache(),
       configuration: const CartoConfiguration(apiKey: 'test'),
       identity: {},
       onTileResult: status.add,
@@ -598,6 +604,7 @@ void main() {
             )
             .first,
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('map_locate_me')));
       await tester.pumpAndSettle();
       expect(find.textContaining('No se obtuvo permiso'), findsOneWidget);
@@ -622,6 +629,7 @@ void main() {
     await tester.pumpAndSettle();
     final home = find.byKey(const Key('btn_home_explorar_mapa'));
     await tester.ensureVisible(home);
+    await tester.pumpAndSettle();
     await tester.tap(home);
     await tester.pumpAndSettle();
     expect(c.currentSection, AppSection.explorarMapa);
@@ -637,6 +645,7 @@ void main() {
           )
           .first,
     );
+    await tester.pumpAndSettle();
     await tester.tap(result);
     await tester.pumpAndSettle();
     expect(c.currentSection, AppSection.detalleServicio);
@@ -726,4 +735,11 @@ class _LoadedTiles extends TileProvider {
   @override
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) =>
       MemoryImage(bytes);
+}
+
+class _NoCache implements MapTileCache {
+  @override
+  Future<Uint8List?> read(String key) async => null;
+  @override
+  Future<void> write(String key, Uint8List bytes, Duration lifetime) async {}
 }
