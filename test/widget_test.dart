@@ -15,6 +15,7 @@ import 'package:hackathon_utp_el_comercio/main.dart';
 
 Future<AppController> _createInitializedTestController({
   bool offline = false,
+  bool signedIn = true,
 }) async {
   final db = LocalSqliteDatabase(engine: InMemoryTransactionalStoreEngine());
   final gateway = SupabaseRemoteGateway(forceSupabaseAvailable: false)
@@ -25,7 +26,7 @@ Future<AppController> _createInitializedTestController({
     remoteGateway: gateway,
     outboxSyncService: outbox,
   );
-  await controller.initialize(startWithActiveSession: true);
+  await controller.initialize(startWithActiveSession: signedIn);
   return controller;
 }
 
@@ -125,6 +126,50 @@ void main() {
         expect(find.text('Reporte comunicado a la comunidad'), findsOneWidget);
       },
     );
+
+    testWidgets('Un invitado puede reportar y sincronizar al reconectar', (
+      tester,
+    ) async {
+      final controller = await _createInitializedTestController(
+        offline: true,
+        signedIn: false,
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        NexoNeighborhoodApp(
+          appController: controller,
+          accessibilityController: AccessibilityController(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('btn_home_reportar_emergencia')));
+      await tester.pumpAndSettle();
+      expect(controller.currentSection, AppSection.publicarRapido);
+      await tester.enterText(
+        find.byKey(const Key('input_publish_title')),
+        'Árbol caído en la avenida',
+      );
+      await tester.enterText(
+        find.byKey(const Key('input_publish_description')),
+        'Hay ramas que bloquean el paso.',
+      );
+      final send = find.byKey(const Key('btn_submit_publication'));
+      await tester.ensureVisible(send);
+      await tester.pumpAndSettle();
+      await tester.tap(send);
+      await tester.pumpAndSettle();
+
+      final report = controller.lastSubmittedPublication!;
+      expect(report.isGuestReport, isTrue);
+      expect(report.syncStatus, SyncStatus.pendiente);
+      expect(controller.userOutbox.single.entityId, report.id);
+      await controller.setOfflineMode(false);
+      await tester.pumpAndSettle();
+      expect(controller.isAuthenticated, isFalse);
+      expect(controller.userOutbox, isEmpty);
+      expect(find.text('Reporte comunicado a la comunidad'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
 
     testWidgets('Perfil muestra el formulario solo al cerrar sesión', (
       tester,

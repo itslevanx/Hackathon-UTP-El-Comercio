@@ -1982,6 +1982,7 @@ class LocalSqliteDatabase {
     final now = DateTime.now().toUtc();
     await _engine.runInTransaction((txn) async {
       for (final remote in remoteList) {
+        final row = remote.toSqlMap();
         final localRows = await txn.query(
           'publications_local',
           where: 'id = ?',
@@ -1991,8 +1992,12 @@ class LocalSqliteDatabase {
           final local = Publication.fromSqlMap(localRows.first);
           if (!local.syncStatus.isConfirmed) continue;
           if (local.isDeleted && !remote.isDeleted) continue;
+          if (remote.isGuestReport &&
+              local.ownerUserId == Publication.guestOwnerId) {
+            row['owner_user_id'] = Publication.guestOwnerId;
+          }
         }
-        await txn.upsert('publications_local', 'id', remote.toSqlMap());
+        await txn.upsert('publications_local', 'id', row);
       }
       await txn.upsert('cache_metadata', 'cache_key', {
         'cache_key': 'last_remote_sync',

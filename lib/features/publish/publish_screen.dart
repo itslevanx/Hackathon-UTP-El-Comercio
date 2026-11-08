@@ -69,10 +69,9 @@ class _PublishScreenState extends State<PublishScreen> {
   }
 
   Future<void> _restoreExistingDraftIfAny() async {
-    final user = widget.controller.currentUser;
-    if (user == null) return;
     final draft = await widget.controller.database.getDraft(
-      ownerUserId: user.id,
+      ownerUserId:
+          widget.controller.currentUser?.id ?? Publication.guestOwnerId,
       draftKey: 'publish_${_selectedKind.dbValue}',
     );
     if (draft != null && mounted) {
@@ -94,8 +93,6 @@ class _PublishScreenState extends State<PublishScreen> {
   }
 
   Future<void> _persistDraftSilently() async {
-    final user = widget.controller.currentUser;
-    if (user == null) return;
     if (_titleController.text.trim().isEmpty &&
         _descController.text.trim().isEmpty &&
         _location == null) {
@@ -104,7 +101,8 @@ class _PublishScreenState extends State<PublishScreen> {
     await widget.controller.database.saveDraft(
       FormDraft(
         draftKey: 'publish_${_selectedKind.dbValue}',
-        ownerUserId: user.id,
+        ownerUserId:
+            widget.controller.currentUser?.id ?? Publication.guestOwnerId,
         kind: _selectedKind,
         title: _titleController.text,
         description: _descController.text,

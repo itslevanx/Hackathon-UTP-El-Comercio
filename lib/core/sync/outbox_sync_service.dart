@@ -25,7 +25,7 @@ class OutboxSyncSummary {
 /// Motor de sincronización de la cola local (`outbox_operations`) hacia Supabase.
 /// Garantiza:
 /// 1. Solo procesa operaciones cuyo `owner_user_id` coincide exactamente con el
-///    usuario autenticado activo.
+///    usuario activo o la cola local de invitado.
 /// 2. Transición verificable `pendiente` -> `enviando` -> `confirmado` | `error` | `conflicto`.
 /// 3. Idempotencia ante reintentos manuales o reconexión.
 class OutboxSyncService {
@@ -38,7 +38,7 @@ class OutboxSyncService {
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
 
-  /// Procesa todas las operaciones pendientes de [activeUserId].
+  /// Procesa las operaciones pendientes de la cuenta o invitado indicado.
   Future<OutboxSyncSummary> syncPendingForUser(
     String activeUserId, {
     String? onlyOperationId,

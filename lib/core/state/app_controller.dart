@@ -300,7 +300,6 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     if (_refreshingRemote ||
         _disposed ||
         !_appForeground ||
-        _currentUser == null ||
         !remoteGateway.isLiveSupabaseConnected ||
         remoteGateway.simulateNetworkOffline) {
       return;
@@ -308,8 +307,24 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _resetFeedScope();
     final scope = _feedScope;
     _refreshingRemote = true;
-    final uid = _currentUser!.id;
+    final uid = _currentUser?.id;
     try {
+      final guestSync = await outboxSyncService.syncPendingForUser(
+        Publication.guestOwnerId,
+      );
+      if (_disposed || _currentUser?.id != uid || scope != _currentFeedScope) {
+        return;
+      }
+      if (guestSync.confirmedCount > 0 ||
+          (uid == null && _userOutbox.isNotEmpty)) {
+        await refreshAllLocalData();
+      }
+      if (uid == null ||
+          _disposed ||
+          _currentUser?.id != uid ||
+          scope != _currentFeedScope) {
+        return;
+      }
       await outboxSyncService.syncPendingForUser(uid);
       final previousHead = _feedHeadId;
       final page = await remoteGateway
@@ -446,12 +461,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Recarga todas las listas desde SQLite respetando el aislamiento por usuario.
   Future<void> refreshAllLocalData() async {
-    final activeId = _currentUser?.id ?? 'anonymous';
+    final activeId = _currentUser?.id ?? Publication.guestOwnerId;
     final allPublications = await database.listPublications(
       activeUserId: activeId,
     );
     _publications = allPublications.where((publication) {
-      if (publication.authorId == _currentUser?.id) return true;
+      if (publication.ownerUserId == activeId) return true;
       final distance = publication.distanceFrom(lat: activeLat, lng: activeLng);
       return (distance != null && distance <= 20000) ||
           (activeDistrictUbigeo != null &&
@@ -465,16 +480,17 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     );
     _lastSyncTimestamp = await database.getLastSyncTimestamp();
 
-    if (_currentUser != null) {
-      _userOutbox = await database.listOutboxForUser(_currentUser!.id);
-      _userDrafts = await database.listDraftsForUser(_currentUser!.id);
-      _userConversations = await database.listConversationsForUser(
-        _currentUser!.id,
-      );
-    } else {
-      _userOutbox = const [];
-      _userDrafts = const [];
-      _userConversations = const [];
+    _userOutbox = await database.listOutboxForUser(activeId);
+    _userDrafts = await database.listDraftsForUser(activeId);
+    _userConversations = _currentUser == null
+        ? const []
+        : await database.listConversationsForUser(activeId);
+
+    final submittedId = _lastSubmittedPublication?.id;
+    if (submittedId != null) {
+      _lastSubmittedPublication = allPublications
+          .where((publication) => publication.id == submittedId)
+          .firstOrNull;
     }
 
     if (_selectedPublication != null) {
@@ -490,15 +506,21 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// Activa o desactiva el modo sin conexión para pruebas o uso real sin red.
   Future<void> setOfflineMode(bool offline) async {
     remoteGateway.simulateNetworkOffline = offline;
-    if (!offline && _currentUser != null) {
+    if (!offline) {
       final summary = await outboxSyncService.syncPendingForUser(
-        _currentUser!.id,
+        Publication.guestOwnerId,
       );
-      if (summary.confirmedCount > 0) {
+      final uid = _currentUser?.id;
+      final accountSync = uid == null
+          ? null
+          : await outboxSyncService.syncPendingForUser(uid);
+      final confirmedCount =
+          summary.confirmedCount + (accountSync?.confirmedCount ?? 0);
+      if (confirmedCount > 0) {
         _statusBannerMessage =
-            'Conexión restablecida: ${summary.confirmedCount} envío(s) confirmado(s) con el barrio.';
+            'Conexión restablecida: $confirmedCount envío(s) confirmado(s) con el barrio.';
       }
-    } else if (offline) {
+    } else {
       _statusBannerMessage = 'Modo sin conexión activo: puedes consultar datos guardados y crear solicitudes en cola local.';
     }
     await refreshAllLocalData();
@@ -556,7 +578,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _publishPresetKind = presetKind;
     _publishTypeLocked = lockTypeForTwoClickFlow;
 
-    if (!isAuthenticated) {
+    if (!isAuthenticated && presetKind != PublicationKind.emergenciaSolicitud) {
       _pendingAuthIntent = PendingAuthIntent(
         description: presetKind.isEmergency
             ? 'Reportar emergencia vecinal'
@@ -591,7 +613,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     ChosenMapLocation? location,
   }) async {
     final user = _currentUser;
-    if (user == null) {
+    if (user == null && kind != PublicationKind.emergenciaSolicitud) {
       throw StateError('Inicia sesión para publicar en tu barrio.');
     }
     if (title.trim().isEmpty) {
@@ -613,25 +635,25 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     final draftPub = Publication(
       id: pubId,
       clientMutationId: mutationId,
-      ownerUserId: user.id,
-      authorId: user.id,
-      authorAlias: user.alias,
+      ownerUserId: user?.id ?? Publication.guestOwnerId,
+      authorId: user?.id ?? '',
+      authorAlias: user?.alias ?? 'Invitado',
       kind: kind,
       category: category,
       title: title.trim(),
       description: description.trim(),
       neighborhood: location == null
-          ? user.neighborhood
+          ? activeNeighborhood
           : locationCatalog.district(location.districtUbigeo)!.name,
-      sector: user.sector,
-      districtUbigeo: location?.districtUbigeo ?? user.districtUbigeo,
+      sector: activeSector,
+      districtUbigeo: location?.districtUbigeo ?? activeDistrictUbigeo,
       availabilityText: availabilityText.trim().isEmpty
           ? 'Horario flexible previa coordinación'
           : availabilityText.trim(),
       priority: priority,
       status: PublicationStatus.abierta,
-      approxLat: location?.publicLat ?? user.approxLat,
-      approxLng: location?.publicLng ?? user.approxLng,
+      approxLat: location?.publicLat ?? activeLat,
+      approxLng: location?.publicLng ?? activeLng,
       shareResourceConsent: shareResourceConsent,
       shareServiceLocation: location?.shareExactService ?? false,
       serviceLat: location?.serviceLat,
@@ -650,17 +672,18 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
     // Intento inmediato de sincronización si hay red disponible
     await outboxSyncService.syncPendingForUser(
-      user.id,
+      savedLocal.ownerUserId,
       onlyOperationId: savedLocal.clientMutationId,
     );
 
     await refreshAllLocalData();
-    final refreshed = _publications
-        .where((p) => p.id == savedLocal.id)
-        .toList();
-    final effectivePub = refreshed.isNotEmpty ? refreshed.first : savedLocal;
-    _lastSubmittedPublication = effectivePub;
-    notifyListeners();
+    final effectivePub =
+        _publications.where((p) => p.id == savedLocal.id).firstOrNull ??
+        savedLocal;
+    if (user?.id == _currentUser?.id) {
+      _lastSubmittedPublication = effectivePub;
+      notifyListeners();
+    }
     return effectivePub;
   }
 
@@ -734,6 +757,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     required Publication publication,
     required String initialMessage,
   }) async {
+    if (publication.isGuestReport) {
+      throw StateError('Este reporte de invitado no tiene chat privado.');
+    }
     final user = _currentUser;
     if (user == null) {
       _pendingAuthIntent = PendingAuthIntent(
@@ -835,6 +861,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     String resourceShared = '',
     bool explicitShareConsent = false,
   }) async {
+    if (publication.isGuestReport) {
+      throw StateError('Este reporte de invitado no admite ofertas privadas.');
+    }
     final user = _currentUser;
     if (user == null) {
       _pendingAuthIntent = PendingAuthIntent(
@@ -1212,18 +1241,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Reintento manual de toda la cola Outbox o de una operación específica.
   Future<OutboxSyncSummary> retryOutboxSync({String? onlyOperationId}) async {
-    final user = _currentUser;
-    if (user == null) {
-      return const OutboxSyncSummary(
-        confirmedCount: 0,
-        pendingCount: 0,
-        errorCount: 0,
-        conflictCount: 0,
-        lastMessage: 'Inicia sesión para sincronizar.',
-      );
-    }
     final summary = await outboxSyncService.syncPendingForUser(
-      user.id,
+      _currentUser?.id ?? Publication.guestOwnerId,
       onlyOperationId: onlyOperationId,
     );
     _statusBannerMessage = summary.lastMessage.isNotEmpty

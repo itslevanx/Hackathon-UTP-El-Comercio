@@ -472,6 +472,17 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     }
     if (isLiveSupabaseConnected) {
       try {
+        if (operation.ownerUserId == Publication.guestOwnerId &&
+            operation.entityType == 'publication') {
+          final version = await _client.rpc<int>(
+            'submit_guest_emergency',
+            params: {'p_report': operation.decodePayload()},
+          );
+          return RemoteSyncResult(
+            status: SyncStatus.confirmado,
+            confirmedVersion: version,
+          );
+        }
         if (_client.auth.currentUser?.id != operation.ownerUserId) {
           throw StateError(
             'La sesión actual no pertenece al autor de esta operación.',
