@@ -1723,9 +1723,11 @@ class LocalSqliteDatabase {
       'messages_local',
       where: 'conversation_id = ?',
       whereArgs: [conversationId],
-      orderBy: 'created_at ASC',
     );
-    return msgRows.map(ChatMessage.fromSqlMap).toList();
+    return msgRows.map(ChatMessage.fromSqlMap).toList()..sort((a, b) {
+      final byTime = a.createdAt.compareTo(b.createdAt);
+      return byTime == 0 ? a.id.compareTo(b.id) : byTime;
+    });
   }
 
   /// Guarda un mensaje cuando hay conexión activa confirmada o para sincronizar.
@@ -1739,6 +1741,7 @@ class LocalSqliteDatabase {
     required String senderAlias,
     required String body,
     required SyncStatus syncStatus,
+    DateTime? createdAt,
   }) async {
     return _engine.runInTransaction((txn) async {
       final convRows = await txn.query(
@@ -1756,7 +1759,6 @@ class LocalSqliteDatabase {
         );
       }
 
-      final now = DateTime.now().toUtc();
       final msg = ChatMessage(
         id: id,
         clientMutationId: clientMutationId,
@@ -1766,7 +1768,7 @@ class LocalSqliteDatabase {
         senderAlias: senderAlias,
         body: body.trim(),
         syncStatus: syncStatus,
-        createdAt: now,
+        createdAt: createdAt ?? DateTime.now().toUtc(),
       );
 
       await txn.upsert('messages_local', 'id', msg.toSqlMap());
