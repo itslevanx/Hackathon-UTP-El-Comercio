@@ -43,7 +43,7 @@ void main() {
       addTearDown(c.dispose);
       c.navigateTo(AppSection.autenticacion);
       await tester.pumpWidget(
-        NexoNeighborhoodApp(
+        Conecta2App(
           appController: c,
           accessibilityController: AccessibilityController(),
         ),
@@ -95,7 +95,7 @@ void main() {
       final c = await _create(remote);
       addTearDown(c.dispose);
       await tester.pumpWidget(
-        NexoNeighborhoodApp(
+        Conecta2App(
           appController: c,
           accessibilityController: AccessibilityController(),
         ),
@@ -172,7 +172,7 @@ void main() {
       final c = await _create(remote);
       addTearDown(c.dispose);
       await tester.pumpWidget(
-        NexoNeighborhoodApp(
+        Conecta2App(
           appController: c,
           accessibilityController: AccessibilityController(),
         ),

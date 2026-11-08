@@ -1,5 +1,5 @@
 name: hackathon_utp_el_comercio
-description: "Aplicación móvil vecinal accesible (nombre provisional: NEXO) para Android y iPhone con Flutter, Supabase y SQLite."
+description: "Conecta2, aplicación móvil vecinal accesible para Android y iPhone con Flutter, Supabase y SQLite."
 publish_to: 'none'
 version: 1.0.0+1
 

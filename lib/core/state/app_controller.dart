@@ -48,7 +48,7 @@ enum AppSection {
   practicaSimulacro,
 }
 
-/// Controlador central de estado de la aplicación comunitaria NEXO.
+/// Controlador central de estado de la aplicación comunitaria Conecta2.
 class AppController extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _syncTimer;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;

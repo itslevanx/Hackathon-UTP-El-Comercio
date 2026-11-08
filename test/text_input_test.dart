@@ -25,7 +25,7 @@ Future<AppController> pumpAuthForm(WidgetTester tester) async {
   await controller.initialize(startWithActiveSession: false);
   controller.navigateTo(AppSection.autenticacion);
   await tester.pumpWidget(
-    NexoNeighborhoodApp(
+    Conecta2App(
       appController: controller,
       accessibilityController: AccessibilityController(),
     ),
@@ -156,7 +156,7 @@ void main() {
       await tester.ensureVisible(email);
       await tester.showKeyboard(email);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('NEXO'));
+      await tester.tap(find.text('Conecta2'));
       await tester.pumpAndSettle();
       expect(state.widget.focusNode.hasFocus, isFalse);
       expect(state.widget.controller.text, 'vecino@example.com');

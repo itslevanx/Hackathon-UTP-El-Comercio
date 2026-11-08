@@ -43,7 +43,7 @@ void main() {
       lockTypeForTwoClickFlow: false,
     );
     await tester.pumpWidget(
-      NexoNeighborhoodApp(
+      Conecta2App(
         appController: controller,
         accessibilityController: AccessibilityController(),
       ),
@@ -93,7 +93,7 @@ void main() {
         final accessibility = AccessibilityController();
 
         await tester.pumpWidget(
-          NexoNeighborhoodApp(
+          Conecta2App(
             appController: controller,
             accessibilityController: accessibility,
           ),
@@ -142,7 +142,7 @@ void main() {
         final accessibility = AccessibilityController();
 
         await tester.pumpWidget(
-          NexoNeighborhoodApp(
+          Conecta2App(
             appController: controller,
             accessibilityController: accessibility,
           ),
@@ -188,7 +188,7 @@ void main() {
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
-        NexoNeighborhoodApp(
+        Conecta2App(
           appController: controller,
           accessibilityController: AccessibilityController(),
         ),
@@ -230,7 +230,7 @@ void main() {
       addTearDown(controller.dispose);
       controller.navigateTo(AppSection.autenticacion);
       await tester.pumpWidget(
-        NexoNeighborhoodApp(
+        Conecta2App(
           appController: controller,
           accessibilityController: AccessibilityController(),
         ),
@@ -255,7 +255,7 @@ void main() {
         final accessibility = AccessibilityController();
 
         await tester.pumpWidget(
-          NexoNeighborhoodApp(
+          Conecta2App(
             appController: controller,
             accessibilityController: accessibility,
           ),
@@ -313,7 +313,7 @@ void main() {
         final accessibility = AccessibilityController();
 
         await tester.pumpWidget(
-          NexoNeighborhoodApp(
+          Conecta2App(
             appController: controller,
             accessibilityController: accessibility,
           ),
@@ -371,7 +371,7 @@ void main() {
         final accessibility = AccessibilityController();
 
         await tester.pumpWidget(
-          NexoNeighborhoodApp(
+          Conecta2App(
             appController: controller,
             accessibilityController: accessibility,
           ),
@@ -455,7 +455,7 @@ void main() {
         )).length;
 
         await tester.pumpWidget(
-          NexoNeighborhoodApp(
+          Conecta2App(
             appController: controller,
             accessibilityController: accessibility,
           ),
@@ -705,7 +705,7 @@ void main() {
         AppTheme.contrastRatio(Colors.white, AppTheme.practiceBlue),
         greaterThanOrEqualTo(7.0),
       );
-      expect(AppConfig.provisionalAppName, equals('NEXO'));
+      expect(AppConfig.appName, equals('Conecta2'));
     });
   });
 }

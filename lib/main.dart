@@ -58,17 +58,16 @@ Future<void> main() async {
   await appController.initialize(startWithActiveSession: true);
 
   runApp(
-    NexoNeighborhoodApp(
+    Conecta2App(
       appController: appController,
       accessibilityController: accessibilityController,
     ),
   );
 }
 
-/// Aplicación principal comunitaria (nombre provisional centralizado en
-/// [AppConfig.provisionalAppName]).
-class NexoNeighborhoodApp extends StatelessWidget {
-  const NexoNeighborhoodApp({
+/// Aplicación principal de Conecta2.
+class Conecta2App extends StatelessWidget {
+  const Conecta2App({
     super.key,
     required this.appController,
     required this.accessibilityController,
@@ -90,8 +89,7 @@ class NexoNeighborhoodApp extends StatelessWidget {
 
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          title:
-              '${AppConfig.provisionalAppName} — ${AppConfig.provisionalSubtitle}',
+          title: '${AppConfig.appName} — ${AppConfig.subtitle}',
           theme: AppTheme.buildTheme(reduceMotion: reduceMotion),
           builder: (context, child) {
             final currentMedia = MediaQuery.of(context);
@@ -161,7 +159,7 @@ class _MainCivicShell extends StatelessWidget {
 
     return Scaffold(
       appBar: CivicAppBar(
-        title: AppConfig.provisionalAppName,
+        title: AppConfig.appName,
         height:
             (MediaQuery.textScalerOf(context).scale(1) > 1.3 ? 164 : 100) +
             (showBack ? 56 : 0),

@@ -139,7 +139,7 @@ void main() {
       );
       await controller.initialize();
       await tester.pumpWidget(
-        NexoNeighborhoodApp(
+        Conecta2App(
           appController: controller,
           accessibilityController: AccessibilityController(),
         ),
@@ -351,7 +351,7 @@ void main() {
     }
     controller.openConversation(thread);
     await tester.pumpWidget(
-      NexoNeighborhoodApp(
+      Conecta2App(
         appController: controller,
         accessibilityController: AccessibilityController(),
       ),
@@ -418,7 +418,7 @@ void main() {
       );
       await controller.initialize();
       await tester.pumpWidget(
-        NexoNeighborhoodApp(
+        Conecta2App(
           appController: controller,
           accessibilityController: AccessibilityController(),
         ),
