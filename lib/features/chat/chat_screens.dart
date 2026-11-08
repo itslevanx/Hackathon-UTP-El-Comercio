@@ -38,7 +38,7 @@ class ChatListScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Conversaciones Privadas Contextuales',
+                  'Chats',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,

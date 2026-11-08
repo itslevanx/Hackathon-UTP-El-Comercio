@@ -228,6 +228,11 @@ class _MainCivicShell extends StatelessWidget {
         Icons.person_outline,
         () => controller.navigateTo(AppSection.misActividades),
       ),
+      (
+        'Chats',
+        Icons.chat_bubble_outline,
+        () => controller.navigateTo(AppSection.chatLista),
+      ),
     ];
     return SafeArea(
       top: false,
@@ -239,6 +244,7 @@ class _MainCivicShell extends StatelessWidget {
             for (final destination in destinations)
               Expanded(
                 child: TextButton(
+                  key: ValueKey('nav_${destination.$1.toLowerCase()}'),
                   onPressed: destination.$3,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
