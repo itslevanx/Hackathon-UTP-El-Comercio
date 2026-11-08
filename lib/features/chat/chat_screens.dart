@@ -9,6 +9,7 @@ import '../../core/state/app_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../shared/civic_widgets.dart';
 import 'message_bubble.dart';
+import 'private_message_push_widgets.dart';
 
 /// Conversaciones privadas del vecino y grupos de emergencia consultados.
 class ChatListScreen extends StatefulWidget {
@@ -159,6 +160,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
             'Tus conversaciones privadas y los grupos de emergencia que has abierto.',
           ),
           const SizedBox(height: 16),
+          if (controller.currentUser case final user?
+              when controller.remoteGateway.isLiveSupabaseConnected &&
+                  !controller.remoteGateway.isTestDouble)
+            PrivateMessagePushSettings(
+              key: ValueKey(user.id),
+              controller: controller,
+              userId: user.id,
+            ),
           if (entries.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),

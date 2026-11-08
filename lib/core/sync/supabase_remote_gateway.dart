@@ -1230,6 +1230,52 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     return result;
   }
 
+  Future<bool> privateMessagePushEnabled() async {
+    if (!isLiveSupabaseConnected || _client.auth.currentUser == null) {
+      return false;
+    }
+    return _client.rpc<bool>('private_message_push_enabled');
+  }
+
+  Future<void> setPrivateMessagePush(
+    String userId,
+    String? installationId,
+  ) async {
+    if (!isLiveSupabaseConnected || _client.auth.currentUser?.id != userId) {
+      throw StateError('La sesión cambió.');
+    }
+    await _client.rpc<void>(
+      'set_private_message_push',
+      params: {'p_user_id': userId, 'p_installation_id': installationId},
+    );
+  }
+
+  Future<ConversationThread?> fetchPrivateConversation(
+    String conversationId,
+  ) async {
+    if (!isLiveSupabaseConnected || simulateNetworkOffline) return null;
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return null;
+    final row = await _client
+        .from('conversations')
+        .select(
+          '*, author:profiles!conversations_publication_author_id_fkey(alias), '
+          'participant:profiles!conversations_participant_id_fkey(alias), '
+          'publications(title)',
+        )
+        .eq('id', conversationId)
+        .maybeSingle();
+    if (row == null || _client.auth.currentUser?.id != userId) return null;
+    final thread = ConversationThread.fromSqlMap({
+      ...row,
+      'owner_user_id': userId,
+      'publication_author_alias': (row['author'] as Map?)?['alias'],
+      'participant_alias': (row['participant'] as Map?)?['alias'],
+      'publication_title': (row['publications'] as Map?)?['title'],
+    });
+    return thread.involvesUser(userId) ? thread : null;
+  }
+
   @override
   Stream<ChatMessage> watchConversationMessages(
     String conversationId, {

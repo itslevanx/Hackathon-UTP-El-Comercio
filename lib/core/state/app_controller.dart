@@ -1268,6 +1268,58 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     if (currentUser?.id == uid) await refreshAllLocalData();
   }
 
+  bool isViewingPrivateChat(String conversationId) {
+    final owner = currentUser?.id;
+    final selected = selectedConversation;
+    if (currentSection != AppSection.chatConversacion ||
+        owner == null ||
+        selected == null ||
+        !selected.involvesUser(owner)) {
+      return false;
+    }
+    return selected.id == conversationId ||
+        _userConversations.any(
+          (thread) =>
+              thread.id == conversationId &&
+              thread.involvesUser(owner) &&
+              thread.peerIdFor(owner) == selected.peerIdFor(owner),
+        );
+  }
+
+  Future<bool> openPrivateChatFromPush(
+    String conversationId,
+    String userId,
+  ) async {
+    if (_disposed || currentUser?.id != userId || passwordRecoveryPending) {
+      return false;
+    }
+    var thread = _userConversations
+        .where((item) => item.id == conversationId && item.involvesUser(userId))
+        .firstOrNull;
+    if (thread == null) {
+      thread = await remoteGateway
+          .fetchPrivateConversation(conversationId)
+          .timeout(const Duration(seconds: 10));
+      if (thread == null || _disposed || currentUser?.id != userId) {
+        return false;
+      }
+      await database.mergeCommunitySnapshot({
+        'conversations': [thread.toSqlMap()],
+      });
+      if (_disposed || currentUser?.id != userId) return false;
+      await refreshAllLocalData();
+    }
+    if (_disposed || currentUser?.id != userId || passwordRecoveryPending) {
+      return false;
+    }
+    if (!isViewingPrivateChat(conversationId)) {
+      await openConversation(thread);
+    }
+    return !_disposed &&
+        currentUser?.id == userId &&
+        isViewingPrivateChat(conversationId);
+  }
+
   Future<void> openConversation(ConversationThread thread) async {
     final owner = currentUser?.id;
     if (owner == null || !thread.involvesUser(owner)) return;
