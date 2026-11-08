@@ -733,9 +733,6 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       onlyOperationId: rec.clientMutationId,
     );
     await refreshAllLocalData();
-    _statusBannerMessage =
-        'Tu opinión vecinal quedó registrada en la ficha del servicio.';
-    notifyListeners();
     return rec;
   }
 
@@ -748,8 +745,6 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     );
     await outboxSyncService.syncPendingForUser(user.id);
     await refreshAllLocalData();
-    _statusBannerMessage = 'Retiraste tu recomendación de este servicio.';
-    notifyListeners();
   }
 
   /// Clic 3 en `Buscar servicios` -> abrir ficha -> escribir mensaje y `Enviar solicitud de contacto`.

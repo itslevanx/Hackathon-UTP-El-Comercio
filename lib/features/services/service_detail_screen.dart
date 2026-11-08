@@ -28,6 +28,8 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
   );
 
   List<ServiceRecommendation> _recommendations = const [];
+  bool _recommendationsLoading = true;
+  bool _savingRecommendation = false;
   String? _feedbackMessage;
   bool _isErrorFeedback = false;
 
@@ -46,6 +48,10 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
     if (mounted) {
       setState(() {
         _recommendations = list;
+        _recommendationsLoading = false;
+        final userId = widget.controller.currentUser?.id;
+        final mine = list.where((r) => r.userId == userId).firstOrNull;
+        if (mine != null) _recCommentController.text = mine.comment;
       });
     }
   }
@@ -82,6 +88,7 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
     required bool allowUpdate,
   }) async {
     setState(() {
+      _savingRecommendation = true;
       _feedbackMessage = null;
       _isErrorFeedback = false;
     });
@@ -92,13 +99,6 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
         allowUpdateExisting: allowUpdate,
       );
       await _loadRecommendations();
-      if (mounted) {
-        setState(() {
-          _isErrorFeedback = false;
-          _feedbackMessage =
-              'Gracias. Tu opinión vecinal fue registrada en esta ficha.';
-        });
-      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -106,19 +106,19 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
           _feedbackMessage = e.toString().replaceFirst('Bad state: ', '');
         });
       }
+    } finally {
+      if (mounted) setState(() => _savingRecommendation = false);
     }
   }
 
   Future<void> _handleWithdrawRecommendation(Publication srv) async {
+    setState(() {
+      _savingRecommendation = true;
+      _feedbackMessage = null;
+    });
     try {
       await widget.controller.withdrawServiceRecommendation(srv);
       await _loadRecommendations();
-      if (mounted) {
-        setState(() {
-          _isErrorFeedback = false;
-          _feedbackMessage = 'Retiraste tu recomendación de este servicio.';
-        });
-      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -126,6 +126,8 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
           _feedbackMessage = e.toString().replaceFirst('Bad state: ', '');
         });
       }
+    } finally {
+      if (mounted) setState(() => _savingRecommendation = false);
     }
   }
 
@@ -373,7 +375,12 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                   constraints: const BoxConstraints(minHeight: 58),
                   child: ElevatedButton.icon(
                     key: const Key('btn_recomendar_servicio'),
-                    onPressed: () => _handleRecommend(srv, allowUpdate: false),
+                    onPressed:
+                        _recommendationsLoading ||
+                            _savingRecommendation ||
+                            hasMyRecommendation
+                        ? null
+                        : () => _handleRecommend(srv, allowUpdate: false),
                     icon: const Icon(Icons.thumb_up_alt_outlined, size: 24),
                     label: const Text('He usado este servicio y lo recomiendo'),
                   ),
@@ -386,14 +393,17 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                     children: [
                       OutlinedButton.icon(
                         key: const Key('btn_modificar_recomendacion'),
-                        onPressed: () =>
-                            _handleRecommend(srv, allowUpdate: true),
+                        onPressed: _savingRecommendation
+                            ? null
+                            : () => _handleRecommend(srv, allowUpdate: true),
                         icon: const Icon(Icons.edit_outlined),
                         label: const Text('Modificar mi recomendación'),
                       ),
                       OutlinedButton.icon(
                         key: const Key('btn_retirar_recomendacion'),
-                        onPressed: () => _handleWithdrawRecommendation(srv),
+                        onPressed: _savingRecommendation
+                            ? null
+                            : () => _handleWithdrawRecommendation(srv),
                         icon: const Icon(Icons.delete_outline),
                         label: const Text('Retirar mi recomendación'),
                       ),

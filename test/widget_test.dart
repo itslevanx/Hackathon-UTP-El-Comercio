@@ -358,10 +358,34 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(clickCount, equals(3));
+        final publish = find.byKey(const Key('btn_recomendar_servicio'));
+        expect(tester.widget<ElevatedButton>(publish).onPressed, isNull);
         expect(
           find.textContaining('Tu opinión vecinal fue registrada'),
-          findsOneWidget,
+          findsNothing,
         );
+        final edit = find.byKey(const Key('btn_modificar_recomendacion'));
+        final remove = find.byKey(const Key('btn_retirar_recomendacion'));
+        final comment = find.byKey(
+          const Key('input_service_recommendation_comment'),
+        );
+        await tester.enterText(comment, 'Opinión actualizada.');
+        await tester.ensureVisible(edit);
+        await tester.pumpAndSettle();
+        await tester.tap(edit);
+        await tester.pumpAndSettle();
+        final recommendations = await controller.database
+            .listRecommendationsForService(controller.selectedPublication!.id);
+        final mine = recommendations.singleWhere(
+          (recommendation) =>
+              recommendation.userId == controller.currentUser!.id,
+        );
+        expect(mine.comment, 'Opinión actualizada.');
+        await tester.ensureVisible(remove);
+        await tester.pumpAndSettle();
+        await tester.tap(remove);
+        await tester.pumpAndSettle();
+        expect(tester.widget<ElevatedButton>(publish).onPressed, isNotNull);
       },
     );
 
