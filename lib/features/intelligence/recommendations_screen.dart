@@ -219,11 +219,9 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
                 child: const Text('Cargar más ofertas'),
               ),
             if (matches.isEmpty && !_data.loading)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  'No hay ayudas compatibles verificables en este distrito. Elige una categoría concreta al publicar la solicitud.',
-                ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(_data.emptyMatchesMessage),
               ),
             for (final m in matches)
               Card(
@@ -232,6 +230,31 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Chip(
+                          avatar: Icon(Icons.handshake_outlined),
+                          label: Text('Match'),
+                        ),
+                      ),
+                      Text(
+                        'SOLICITA · ${(_data.snapshot?['request'] as Map?)?['author_alias'] ?? widget.app.currentUser?.alias ?? 'Vecino'}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        (_data.snapshot?['request'] as Map?)?['title']
+                                as String? ??
+                            'Solicitud de ayuda',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Icon(Icons.swap_vert),
+                      ),
+                      const Text(
+                        'OFRECE',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       Text(
                         m.offer['title'] as String,
                         style: Theme.of(context).textTheme.titleLarge,

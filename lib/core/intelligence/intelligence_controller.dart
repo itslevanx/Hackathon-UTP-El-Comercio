@@ -62,6 +62,24 @@ class IntelligenceController extends ChangeNotifier {
               .map((e) => Map<String, dynamic>.from(e as Map))
               .toList(),
         );
+  String get emptyMatchesMessage {
+    if (snapshot?['request'] == null) {
+      return notice ?? 'Actualiza para consultar las ayudas disponibles.';
+    }
+    if (stale) {
+      return 'No hay recomendaciones guardadas. Actualiza con conexión.';
+    }
+    final category = (snapshot!['request'] as Map)['category'] as String?;
+    if (category == null ||
+        ['general', 'donaciones', 'habilidades'].contains(category)) {
+      return 'Edita tu solicitud y elige el recurso que necesitas, por ejemplo Agua o Alimentos.';
+    }
+    return 'Todavía no hay ofertas compatibles de ${CommunityCategories.label(category)} '
+        'de otros vecinos en el distrito de tu solicitud. '
+        'El vecino que ofrece ayuda debe publicar una oferta o donación con esa misma categoría. '
+        'Las recomendaciones se actualizan automáticamente.';
+  }
+
   void setDistrict(String? value, {bool complete = true}) {
     districtOverride = value;
     districtSelectionComplete = complete;
@@ -107,7 +125,7 @@ class IntelligenceController extends ChangeNotifier {
       return;
     }
     final ticket = ++_epoch;
-    final key = 'intelligence:v1:$scope';
+    final key = 'intelligence:v2:$scope';
     loading = true;
     notice = null;
     notifyListeners();

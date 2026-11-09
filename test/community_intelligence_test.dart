@@ -20,6 +20,8 @@ Map<String, dynamic> need() => {
   'id': 'need',
   'author_id': 'me',
   'kind': 'favor_solicitud',
+  'title': 'Necesito agua potable',
+  'author_alias': 'Lucía Rojas',
   'status': 'abierta',
   'category': 'agua',
   'district_ubigeo': '150110',
@@ -94,6 +96,49 @@ Future<AppController> app(SnapshotGateway gateway) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => PeruLocationCatalog.load());
+  test(
+    'Sin ofertas explica el recurso pendiente y distingue errores de conexión',
+    () async {
+      final gateway = SnapshotGateway();
+      final c = await app(gateway);
+      addTearDown(c.dispose);
+      final data = IntelligenceController(c, requestId: 'need');
+      addTearDown(data.dispose);
+      data.snapshot = {
+        'request': need(),
+        'offers': [],
+        'expires_at': DateTime.now()
+            .add(const Duration(minutes: 1))
+            .toIso8601String(),
+      };
+      data.saved = false;
+      expect(data.matches, isEmpty);
+      expect(data.emptyMatchesMessage, contains('ofertas compatibles de Agua'));
+      expect(data.emptyMatchesMessage, contains('otros vecinos'));
+      data.saved = true;
+      expect(data.emptyMatchesMessage, contains('guardadas'));
+      data.snapshot = null;
+      data.notice = 'No se pudo actualizar.';
+      expect(data.emptyMatchesMessage, data.notice);
+    },
+  );
+  test('Diez ofertas de agua aparecen puntuadas; transporte y agotadas quedan fuera', () {
+    final offers = List.generate(
+      10,
+      (i) => {...offer('water-$i'), 'approx_lat': null, 'approx_lng': null},
+    );
+    final results = CommunityMatcher().rank(need(), [
+      ...offers,
+      offer('transport', category: 'transporte'),
+      {...offer('empty'), 'status': 'resuelta'},
+    ]);
+    expect(results, hasLength(10));
+    expect(
+      results.every((r) => r.score == 50 && r.distanceMeters == null),
+      isTrue,
+    );
+    expect(results.map((r) => r.id).toSet(), hasLength(10));
+  });
   test('Compatibilidad exacta y aliases explícitos, sin urgencia que venza incompatibilidad', () {
     final request = {...need(), 'priority': 'emergencia'};
     final results = CommunityMatcher().rank(request, [
@@ -261,6 +306,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Agua disponible'), findsOneWidget);
+      expect(find.text('Match'), findsOneWidget);
+      expect(find.text('Necesito agua potable'), findsOneWidget);
+      expect(find.text('SOLICITA · Lucía Rojas'), findsOneWidget);
       final contact = tester.widget<FilledButton>(
         find.widgetWithText(FilledButton, 'Contactar'),
       );
