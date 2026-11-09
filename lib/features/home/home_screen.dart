@@ -1,4 +1,5 @@
 import '../publish/publication_owner_actions.dart';
+import '../intelligence/recommendations_screen.dart';
 
 import 'package:flutter/material.dart';
 
@@ -27,6 +28,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final c = widget.controller;
     final pendingCount = c.userOutbox.length;
 
+    final requests = c.publications
+        .where(
+          (p) =>
+              p.authorId == c.currentUser?.id &&
+              !p.isDeleted &&
+              p.status == PublicationStatus.abierta &&
+              (p.kind == PublicationKind.favorSolicitud ||
+                  p.kind == PublicationKind.emergenciaSolicitud),
+        )
+        .toList();
     final feed = c.neighborhoodFeed;
     return NotificationListener<ScrollNotification>(
       onNotification: (event) {
@@ -128,6 +139,63 @@ class _HomeScreenState extends State<HomeScreen> {
                     onTap: () => c.navigateTo(AppSection.explorarMapa),
                   ),
                   const SizedBox(height: 12),
+
+                  if (requests.isNotEmpty) ...[
+                    OutlinedButton.icon(
+                      key: const Key('btn_home_recomendaciones'),
+                      icon: const Icon(Icons.handshake_outlined),
+                      label: const Text('Ayudas para mis solicitudes'),
+                      onPressed: () async {
+                        final request = requests.length == 1
+                            ? requests.first
+                            : await showModalBottomSheet<Publication>(
+                                context: context,
+                                isScrollControlled: true,
+                                builder: (sheetContext) => SafeArea(
+                                  child: SizedBox(
+                                    height:
+                                        MediaQuery.sizeOf(sheetContext).height *
+                                        .6,
+                                    child: ListView(
+                                      children: [
+                                        const Padding(
+                                          padding: EdgeInsets.all(16),
+                                          child: Text(
+                                            'Elige tu solicitud',
+                                            style: TextStyle(
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        for (final p in requests)
+                                          ListTile(
+                                            title: Text(p.title),
+                                            trailing: const Icon(
+                                              Icons.chevron_right,
+                                            ),
+                                            onTap: () =>
+                                                Navigator.pop(sheetContext, p),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                        if (request == null || !context.mounted) return;
+                        await Navigator.push<void>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RecommendationsScreen(
+                              app: c,
+                              requestId: request.id,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
 
                   // 5. Ver favores y ayudar (3 clics total: Inicio -> abrir solicitud -> Enviar oferta de ayuda)
                   _PrimaryCivicActionButton(

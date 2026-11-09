@@ -120,6 +120,23 @@ void main() {
       expect(data.emptyMatchesMessage, data.notice);
     },
   );
+  test('Diez ofertas de agua aparecen puntuadas; transporte y agotadas quedan fuera', () {
+    final offers = List.generate(
+      10,
+      (i) => {...offer('water-$i'), 'approx_lat': null, 'approx_lng': null},
+    );
+    final results = CommunityMatcher().rank(need(), [
+      ...offers,
+      offer('transport', category: 'transporte'),
+      {...offer('empty'), 'status': 'resuelta'},
+    ]);
+    expect(results, hasLength(10));
+    expect(
+      results.every((r) => r.score == 50 && r.distanceMeters == null),
+      isTrue,
+    );
+    expect(results.map((r) => r.id).toSet(), hasLength(10));
+  });
   test('Compatibilidad exacta y aliases explícitos, sin urgencia que venza incompatibilidad', () {
     final request = {...need(), 'priority': 'emergencia'};
     final results = CommunityMatcher().rank(request, [
