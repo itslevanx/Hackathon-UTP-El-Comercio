@@ -20,6 +20,8 @@ Map<String, dynamic> need() => {
   'id': 'need',
   'author_id': 'me',
   'kind': 'favor_solicitud',
+  'title': 'Necesito agua potable',
+  'author_alias': 'Lucía Rojas',
   'status': 'abierta',
   'category': 'agua',
   'district_ubigeo': '150110',
@@ -304,6 +306,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Agua disponible'), findsOneWidget);
+      expect(find.text('Match'), findsOneWidget);
+      expect(find.text('Necesito agua potable'), findsOneWidget);
+      expect(find.text('SOLICITA · Lucía Rojas'), findsOneWidget);
       final contact = tester.widget<FilledButton>(
         find.widgetWithText(FilledButton, 'Contactar'),
       );

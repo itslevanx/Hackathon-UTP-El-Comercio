@@ -31,7 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final requests = c.publications
         .where(
           (p) =>
-              p.authorId == c.currentUser?.id &&
+              p.districtUbigeo == c.activeDistrictUbigeo &&
               !p.isDeleted &&
               p.status == PublicationStatus.abierta &&
               (p.kind == PublicationKind.favorSolicitud ||
@@ -144,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     OutlinedButton.icon(
                       key: const Key('btn_home_recomendaciones'),
                       icon: const Icon(Icons.handshake_outlined),
-                      label: const Text('Ayudas para mis solicitudes'),
+                      label: const Text('Matches en tu barrio'),
                       onPressed: () async {
                         final request = requests.length == 1
                             ? requests.first
@@ -161,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         const Padding(
                                           padding: EdgeInsets.all(16),
                                           child: Text(
-                                            'Elige tu solicitud',
+                                            'Elige una solicitud',
                                             style: TextStyle(
                                               fontSize: 22,
                                               fontWeight: FontWeight.bold,

@@ -231,7 +231,7 @@ class _FavorDetailScreenState extends State<FavorDetailScreen> {
 
           if ((fav.kind == PublicationKind.favorSolicitud ||
                   fav.kind == PublicationKind.emergenciaSolicitud) &&
-              fav.authorId == c.currentUser?.id &&
+              c.currentUser != null &&
               fav.status == PublicationStatus.abierta)
             OutlinedButton.icon(
               key: const Key('help_recommendations'),

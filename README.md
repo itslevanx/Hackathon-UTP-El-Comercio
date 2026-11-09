@@ -416,3 +416,7 @@ Capacidad del proyecto remoto comprobada en lectura: PostgreSQL 17.11, PostGIS 3
 Validación de esta entrega: 111 pruebas Flutter aprobadas, `flutter analyze` sin incidencias, nueve scripts SQL aprobados en la base local e iOS Simulator compilado sin firma. Android no se compiló porque este entorno no tiene Android SDK ni Java Runtime. No se instalaron estos cambios en dispositivos físicos.
 
 El panel de riesgos del mapa es desplegable para dar prioridad al mapa y a los avisos. Los mensajes de conexión se mantienen breves; el detalle conserva el contexto de cada concentración.
+
+### Matches entre vecinos del distrito
+
+Inicio → «Matches en tu barrio» permite elegir una solicitud visible del distrito y ver cada pareja solicitud–oferta con la etiqueta «Match». La migración `20261109003000_visible_help_matches.sql` añade una consulta con permisos del invocador y RLS, limitada al distrito del perfil autenticado; no modifica la consulta privada anterior. Los datos guardados siguen identificados como tales y no permiten confirmar disponibilidad sin conexión. Las publicaciones de demostración indican expresamente que no representan recursos disponibles.

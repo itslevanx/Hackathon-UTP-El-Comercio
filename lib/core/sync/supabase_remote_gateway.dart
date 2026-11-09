@@ -1132,7 +1132,7 @@ class SupabaseRemoteGateway implements RemoteBackendGateway {
     final result = await _client.rpc(
       requestId == null
           ? 'community_risk_snapshot'
-          : 'community_help_candidates',
+          : 'community_visible_help_candidates',
       params: requestId == null
           ? {
               'p_district': district,

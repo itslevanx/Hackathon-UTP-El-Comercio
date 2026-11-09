@@ -125,7 +125,7 @@ class IntelligenceController extends ChangeNotifier {
       return;
     }
     final ticket = ++_epoch;
-    final key = 'intelligence:v1:$scope';
+    final key = 'intelligence:v2:$scope';
     loading = true;
     notice = null;
     notifyListeners();
