@@ -94,6 +94,32 @@ Future<AppController> app(SnapshotGateway gateway) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => PeruLocationCatalog.load());
+  test(
+    'Sin ofertas explica el recurso pendiente y distingue errores de conexión',
+    () async {
+      final gateway = SnapshotGateway();
+      final c = await app(gateway);
+      addTearDown(c.dispose);
+      final data = IntelligenceController(c, requestId: 'need');
+      addTearDown(data.dispose);
+      data.snapshot = {
+        'request': need(),
+        'offers': [],
+        'expires_at': DateTime.now()
+            .add(const Duration(minutes: 1))
+            .toIso8601String(),
+      };
+      data.saved = false;
+      expect(data.matches, isEmpty);
+      expect(data.emptyMatchesMessage, contains('ofertas compatibles de Agua'));
+      expect(data.emptyMatchesMessage, contains('otros vecinos'));
+      data.saved = true;
+      expect(data.emptyMatchesMessage, contains('guardadas'));
+      data.snapshot = null;
+      data.notice = 'No se pudo actualizar.';
+      expect(data.emptyMatchesMessage, data.notice);
+    },
+  );
   test('Compatibilidad exacta y aliases explícitos, sin urgencia que venza incompatibilidad', () {
     final request = {...need(), 'priority': 'emergencia'};
     final results = CommunityMatcher().rank(request, [

@@ -219,11 +219,9 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
                 child: const Text('Cargar más ofertas'),
               ),
             if (matches.isEmpty && !_data.loading)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  'No hay ayudas compatibles verificables en este distrito. Elige una categoría concreta al publicar la solicitud.',
-                ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(_data.emptyMatchesMessage),
               ),
             for (final m in matches)
               Card(
